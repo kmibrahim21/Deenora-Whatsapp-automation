@@ -69,26 +69,54 @@ function SignupPageInner() {
       ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
       : undefined;
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+          ...(emailRedirectTo ? { emailRedirectTo } : {}),
         },
-        ...(emailRedirectTo ? { emailRedirectTo } : {}),
-      },
-    });
+      });
 
-    if (error) {
-      setError(error.message);
+      if (error) {
+        if (
+          error.message?.includes("Failed to fetch") ||
+          error.message?.includes("Invalid URL") ||
+          error.message?.includes("fetch")
+        ) {
+          setError(
+            "Supabase connection error: Could not connect to database. Please verify your Supabase configuration."
+          );
+        } else {
+          setError(error.message);
+        }
+        setLoading(false);
+        return;
+      }
+
+      // If auto-confirm is enabled or session is created immediately, navigate directly
+      if (data?.session) {
+        const destination = inviteToken
+          ? `/join/${encodeURIComponent(inviteToken)}`
+          : "/dashboard";
+        window.location.href = destination;
+        return;
+      }
+
+      setSuccess(true);
+    } catch (err: unknown) {
+      console.error("Signup error:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(
+        msg || "An unexpected error occurred during account creation. Please try again."
+      );
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setSuccess(true);
-    setLoading(false);
   };
 
   if (success) {
