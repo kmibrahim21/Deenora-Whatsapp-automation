@@ -7,6 +7,7 @@ import {
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
 import { validateAiCredentials } from '@/lib/ai/validate'
+import { extractApiKeys } from '@/lib/ai/generate'
 import { embedTexts } from '@/lib/ai/embeddings'
 import { AiError, type AiProvider } from '@/lib/ai/types'
 
@@ -19,7 +20,7 @@ function bad(message: string) {
  *
  * Any member may read the config so the inbox/settings can reflect
  * whether AI is set up. The encrypted key is NEVER returned — only a
- * `has_key` flag; the settings form shows a masked placeholder.
+ * `has_key` flag and count; the settings form shows masked placeholders.
  */
 export async function GET() {
   try {
@@ -47,9 +48,20 @@ export async function GET() {
     // The keys are selected only to derive the has_* flags; neither is
     // returned to the client.
     const { api_key, embeddings_api_key, ...safe } = data
+    let keyCount = 0
+    if (api_key) {
+      try {
+        const decrypted = decrypt(api_key)
+        keyCount = Math.max(1, extractApiKeys(decrypted).length)
+      } catch {
+        keyCount = 1
+      }
+    }
+
     return NextResponse.json({
       configured: true,
       has_key: !!api_key,
+      key_count: keyCount,
       has_embeddings_key: !!embeddings_api_key,
       ...safe,
     })

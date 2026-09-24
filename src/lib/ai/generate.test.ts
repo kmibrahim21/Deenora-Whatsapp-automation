@@ -192,3 +192,60 @@ describe('generateReply — Anthropic', () => {
     expect(body.messages).toHaveLength(1)
   })
 })
+
+describe('generateReply — Multi-Key Failover Rotation', () => {
+  it('automatically falls back to secondary key when primary key hits 429 rate limit', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        errResponse(429, { error: { message: 'Rate limit exceeded' } }),
+      )
+      .mockResolvedValueOnce(
+        okResponse({
+          choices: [{ message: { content: 'Recovered via key #2!' } }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await generateReply({
+      config: config({
+        provider: 'openai',
+        apiKey: 'sk-key1\nsk-key2',
+      }),
+      systemPrompt: 'sys',
+      messages: [{ role: 'user', content: 'Hi' }],
+    })
+
+    expect(res.text).toBe('Recovered via key #2!')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer sk-key1')
+    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer sk-key2')
+  })
+
+  it('supports comma-separated multi-keys for failover', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        errResponse(429, { error: { message: 'Quota exceeded' } }),
+      )
+      .mockResolvedValueOnce(
+        okResponse({
+          choices: [{ message: { content: 'Success with backup key!' } }],
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await generateReply({
+      config: config({
+        provider: 'openai',
+        apiKey: 'sk-fail, sk-success',
+      }),
+      systemPrompt: 'sys',
+      messages: [{ role: 'user', content: 'Hello' }],
+    })
+
+    expect(res.text).toBe('Success with backup key!')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+})

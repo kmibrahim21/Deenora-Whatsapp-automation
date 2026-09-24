@@ -82,17 +82,49 @@ export async function generateGemini(args: ProviderArgs): Promise<ProviderResult
   }
 
   if (!res.ok) {
-    // Gemini reports a bad key as HTTP 400 ("API key not valid"), not
-    // 401/403 — map it so the "Test key" button shows "invalid key".
-    if (res.status === 400) {
-      const body = await res.clone().text().catch(() => '')
-      if (/API_KEY_INVALID|API key not valid/i.test(body)) {
-        throw new AiError('Gemini rejected the API key', {
-          code: 'invalid_key',
-          status: 401,
-        })
-      }
+    const body = await res.clone().text().catch(() => '')
+    let detail = ''
+    try {
+      const parsed = JSON.parse(body)
+      detail = parsed?.error?.message || ''
+    } catch {
+      detail = body
     }
+
+    // Gemini reports bad key as HTTP 400 with API_KEY_INVALID
+    if (res.status === 400 && (/API_KEY_INVALID|API key not valid/i.test(body) || /API_KEY_INVALID|API key not valid/i.test(detail))) {
+      throw new AiError('Gemini rejected the API key: Invalid API key.', {
+        code: 'invalid_key',
+        status: 401,
+      })
+    }
+
+    // Gemini reports permission/access issues as 403
+    if (res.status === 403) {
+      throw new AiError(
+        detail
+          ? `Gemini Access Denied (403): ${detail}`
+          : 'Gemini Access Denied (403): Please ensure API Key has no restrictive IP/HTTP Referrer settings and Generative Language API is enabled.',
+        {
+          code: 'invalid_key',
+          status: 403,
+        },
+      )
+    }
+
+    // Gemini rate limit / quota exceeded
+    if (res.status === 429 || /RESOURCE_EXHAUSTED|quota/i.test(body) || /RESOURCE_EXHAUSTED|quota/i.test(detail)) {
+      throw new AiError(
+        detail
+          ? `Gemini rate limit / quota exceeded (429): ${detail}`
+          : 'Gemini rate limit reached (429): Requests per minute or daily quota exhausted.',
+        {
+          code: 'rate_limited',
+          status: 429,
+        },
+      )
+    }
+
     throw await providerHttpError('Gemini', res)
   }
 

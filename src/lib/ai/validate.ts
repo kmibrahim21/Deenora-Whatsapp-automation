@@ -1,18 +1,31 @@
-import { generateReply } from './generate'
-import type { AiConfig } from './types'
+import { extractApiKeys, generateReply } from './generate'
+import { AiError, type AiConfig } from './types'
 
 /**
- * Cheap liveness + auth check: one tiny generation against the
- * configured provider/model with the caller's key. Throws `AiError`
- * (invalid_key / rate_limited / network / timeout) on failure, resolves
- * on success. Used by the settings "Test key" button and before
- * persisting a config — the same "verify before save" discipline the
- * WhatsApp config uses with Meta.
+ * Cheap liveness + auth check: validates configured keys against the
+ * configured provider/model. Throws `AiError` on failure, resolves on success.
  */
 export async function validateAiCredentials(config: AiConfig): Promise<void> {
-  await generateReply({
-    config,
-    systemPrompt: 'You are a connectivity check. Reply with the single word: OK.',
-    messages: [{ role: 'user', content: 'ping' }],
-  })
+  const keys = extractApiKeys(config.apiKey)
+  if (keys.length === 0) {
+    throw new AiError('API key is required', { code: 'missing_key', status: 400 })
+  }
+
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i]
+    try {
+      await generateReply({
+        config: { ...config, apiKey: key },
+        systemPrompt: 'You are a connectivity check. Reply with the single word: OK.',
+        messages: [{ role: 'user', content: 'ping' }],
+      })
+    } catch (err) {
+      const label = keys.length > 1 ? `Key #${i + 1}` : 'API key'
+      const msg = err instanceof Error ? err.message : String(err)
+      throw new AiError(`${label} validation error: ${msg}`, {
+        code: err instanceof AiError ? err.code : 'invalid_key',
+        status: 400,
+      })
+    }
+  }
 }

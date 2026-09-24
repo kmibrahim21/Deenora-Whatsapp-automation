@@ -2,7 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Sparkles, CheckCircle2, Trash2, Eye, EyeOff } from 'lucide-react';
+import {
+  Loader2,
+  Sparkles,
+  CheckCircle2,
+  Trash2,
+  Eye,
+  EyeOff,
+  Plus,
+  Info,
+  ShieldCheck,
+  AlertCircle,
+} from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { canEditSettings } from '@/lib/auth/roles';
 import { Button } from '@/components/ui/button';
@@ -50,6 +61,8 @@ const KEY_PLACEHOLDER: Record<AiProvider, string> = {
   gemini: 'AIza...',
 };
 
+const MAX_KEYS = 4;
+
 export function AiConfig() {
   const { accountId, accountRole, profileLoading } = useAuth();
   const canEdit = accountRole ? canEditSettings(accountRole) : false;
@@ -63,10 +76,13 @@ export function AiConfig() {
   const [configured, setConfigured] = useState(false);
   const [provider, setProvider] = useState<AiProvider>('openai');
   const [model, setModel] = useState(AI_PROVIDER_DEFAULT_MODEL.openai);
-  const [apiKey, setApiKey] = useState('');
+  
+  // Array of API keys (1 to 4 keys for automatic failover/rotation)
+  const [apiKeys, setApiKeys] = useState<string[]>(['']);
+  const [showKeys, setShowKeys] = useState<boolean[]>([false]);
   const [keyEdited, setKeyEdited] = useState(false);
-  const [showKey, setShowKey] = useState(false);
   const [hasStoredKey, setHasStoredKey] = useState(false);
+
   const [embeddingsKey, setEmbeddingsKey] = useState('');
   const [embeddingsKeyEdited, setEmbeddingsKeyEdited] = useState(false);
   const [hasStoredEmbeddingsKey, setHasStoredEmbeddingsKey] = useState(false);
@@ -80,8 +96,7 @@ export function AiConfig() {
 
   // Guard keyed on the account (not a bare boolean) so an in-place
   // account switch — ownership transfer, multi-account membership —
-  // refetches instead of showing the previous account's config. Mirrors
-  // the loadedAccountIdRef pattern in whatsapp-config.tsx.
+  // refetches instead of showing the previous account's config.
   const loadedAccountIdRef = useRef<string | null>(null);
 
   const fetchConfig = useCallback(async () => {
@@ -103,8 +118,12 @@ export function AiConfig() {
         setMaxPerConversation(data.auto_reply_max_per_conversation ?? 3);
         setHandoffAgentId(data.handoff_agent_id ?? '');
         setHasStoredKey(Boolean(data.has_key));
-        setApiKey(data.has_key ? MASKED_KEY : '');
+
+        const count = Math.max(1, Math.min(MAX_KEYS, data.key_count || 1));
+        setApiKeys(data.has_key ? Array(count).fill(MASKED_KEY) : ['']);
+        setShowKeys(Array(count).fill(false));
         setKeyEdited(false);
+
         setHasStoredEmbeddingsKey(Boolean(data.has_embeddings_key));
         setEmbeddingsKey(data.has_embeddings_key ? MASKED_KEY : '');
         setEmbeddingsKeyEdited(false);
@@ -120,9 +139,6 @@ export function AiConfig() {
     if (!accountId || loadedAccountIdRef.current === accountId) return;
     loadedAccountIdRef.current = accountId;
     void fetchConfig();
-    // Members populate the handoff-target picker. Best-effort — on an
-    // older deployment without the endpoint the picker just shows the
-    // queue option.
     void fetchAccountMembers().then(setMembers);
   }, [accountId, fetchConfig]);
 
@@ -138,7 +154,70 @@ export function AiConfig() {
     if (isDefaultModel) setModel(AI_PROVIDER_DEFAULT_MODEL[next]);
   };
 
-  const keyPayload = () => (keyEdited ? apiKey.trim() : undefined);
+  const handleKeyChange = (index: number, value: string) => {
+    // If the user pastes multiple keys separated by newlines or commas
+    if (value.includes('\n') || (value.includes(',') && value.length > 50)) {
+      const parts = value
+        .split(/[\r\n,]+/)
+        .map((k) => k.trim())
+        .filter(Boolean);
+      if (parts.length > 1) {
+        const nextKeys = [...apiKeys];
+        for (let i = 0; i < parts.length && index + i < MAX_KEYS; i++) {
+          nextKeys[index + i] = parts[i];
+        }
+        setApiKeys(nextKeys);
+        setKeyEdited(true);
+        return;
+      }
+    }
+
+    const next = [...apiKeys];
+    next[index] = value;
+    setApiKeys(next);
+    setKeyEdited(true);
+  };
+
+  const handleKeyFocus = (index: number) => {
+    if (!keyEdited && hasStoredKey && apiKeys[index] === MASKED_KEY) {
+      const next = [...apiKeys];
+      next[index] = '';
+      setApiKeys(next);
+      setKeyEdited(true);
+    }
+  };
+
+  const toggleShowKey = (index: number) => {
+    setShowKeys((prev) => {
+      const next = [...prev];
+      next[index] = !next[index];
+      return next;
+    });
+  };
+
+  const addKeyField = () => {
+    if (apiKeys.length >= MAX_KEYS) return;
+    setApiKeys((prev) => [...prev, '']);
+    setShowKeys((prev) => [...prev, false]);
+    setKeyEdited(true);
+  };
+
+  const removeKeyField = (index: number) => {
+    if (apiKeys.length <= 1) {
+      setApiKeys(['']);
+      setShowKeys([false]);
+    } else {
+      setApiKeys((prev) => prev.filter((_, i) => i !== index));
+      setShowKeys((prev) => prev.filter((_, i) => i !== index));
+    }
+    setKeyEdited(true);
+  };
+
+  const keyPayload = () => {
+    if (!keyEdited) return undefined;
+    const clean = apiKeys.map((k) => k.trim()).filter((k) => k.length > 0);
+    return clean.length > 0 ? clean.join('\n') : '';
+  };
 
   // undefined = leave unchanged; '' typed = null (clear); text = set.
   const embeddingsKeyPayload = () =>
@@ -169,8 +248,15 @@ export function AiConfig() {
         }),
       });
       const data = await res.json();
-      if (res.ok) toast.success(t('testSuccess'));
-      else toast.error(data.error ?? t('testRejected'));
+      if (res.ok) {
+        toast.success(
+          apiKeys.filter((k) => k.trim()).length > 1
+            ? 'All configured API keys verified successfully!'
+            : t('testSuccess'),
+        );
+      } else {
+        toast.error(data.error ?? t('testRejected'), { duration: 6000 });
+      }
     } catch {
       toast.error(t('testNetworkError'));
     } finally {
@@ -199,7 +285,7 @@ export function AiConfig() {
         toast.success(t('saveSuccess'));
         await fetchConfig();
       } else {
-        toast.error(data.error ?? t('saveFailed'));
+        toast.error(data.error ?? t('saveFailed'), { duration: 6000 });
       }
     } catch {
       toast.error(t('saveFailed'));
@@ -216,7 +302,8 @@ export function AiConfig() {
         toast.success(t('removeSuccess'));
         setConfigured(false);
         setHasStoredKey(false);
-        setApiKey('');
+        setApiKeys(['']);
+        setShowKeys([false]);
         setKeyEdited(false);
         setIsActive(false);
         setAutoReplyEnabled(false);
@@ -236,8 +323,7 @@ export function AiConfig() {
   if (loading || profileLoading) {
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t('loadFailed')} {/* Re-using label or a global one, wait, loading is better. Let's use useTranslations from overview or just hardcode Loading... actually I should add loading to aiConfig */}
-        {/* Wait, I didn't add loading to aiConfig. I'll just use loading. */}
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...
       </div>
     );
   }
@@ -267,7 +353,7 @@ export function AiConfig() {
               {t('encryptionNotice')}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>{t('provider')}</Label>
@@ -301,57 +387,123 @@ export function AiConfig() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="ai-key">{t('apiKey')}</Label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Input
-                    id="ai-key"
-                    type={showKey ? 'text' : 'password'}
-                    value={apiKey}
-                    onChange={(e) => {
-                      setApiKey(e.target.value);
-                      setKeyEdited(true);
-                    }}
-                    onFocus={() => {
-                      if (!keyEdited && hasStoredKey) {
-                        setApiKey('');
-                        setKeyEdited(true);
-                      }
-                    }}
-                    placeholder={KEY_PLACEHOLDER[provider]}
-                    disabled={disabled}
-                    autoComplete="off"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKey((s) => !s)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    tabIndex={-1}
-                  >
-                    {showKey ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
+            {/* Provider Info / Troubleshooting Banner for Gemini */}
+            {provider === 'gemini' && (
+              <div className="rounded-lg border border-sky-500/20 bg-sky-50/50 p-3.5 text-xs text-sky-900 dark:bg-sky-950/20 dark:text-sky-200">
+                <div className="flex items-start gap-2.5">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
+                  <div className="space-y-1">
+                    <p className="font-semibold text-sky-950 dark:text-sky-100">
+                      Google Gemini API কী সেটআপ ও এক্সেস নির্দেশনা:
+                    </p>
+                    <ul className="list-inside list-disc space-y-0.5 text-muted-foreground dark:text-sky-300">
+                      <li>Google AI Studio (<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline font-medium hover:text-sky-600">aistudio.google.com</a>) থেকে API Key তৈরি করুন।</li>
+                      <li>Google Cloud Console-এ API Key এর <strong>Application restrictions</strong> অবশ্যই <code>None</code> রাখুন (HTTP Referrer বা IP রেস্ট্রিক্ট থাকলে সার্ভার থেকে কল ব্লক হবে ও Access Denied দেখাবে)।</li>
+                      <li>প্রজেক্টে <strong>Generative Language API</strong> সক্রিয় থাকতে হবে।</li>
+                    </ul>
+                  </div>
                 </div>
+              </div>
+            )}
+
+            {/* API Keys with Multi-Key Rotation / Fallback */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="ai-key-0">{t('apiKey')}</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    একাধিক কী (সর্বোচ্চ {MAX_KEYS}টি) দিলে একটির লিমিট বা কোটা শেষ হলে স্বয়ংক্রিয়ভাবে পরবর্তী কী ব্যবহার হবে (Auto Failover)।
+                  </p>
+                </div>
+                {apiKeys.length < MAX_KEYS && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addKeyField}
+                    disabled={disabled}
+                    className="h-7 text-xs gap-1"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> ব্যাকআপ কী যোগ করুন
+                  </Button>
+                )}
+              </div>
+
+              <div className="space-y-2.5">
+                {apiKeys.map((keyVal, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center">
+                        <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                          {idx === 0 ? 'Primary' : `Backup #${idx}`}
+                        </span>
+                      </div>
+                      <Input
+                        id={`ai-key-${idx}`}
+                        type={showKeys[idx] ? 'text' : 'password'}
+                        value={keyVal}
+                        onChange={(e) => handleKeyChange(idx, e.target.value)}
+                        onFocus={() => handleKeyFocus(idx)}
+                        placeholder={`${KEY_PLACEHOLDER[provider]} ${idx > 0 ? `(Backup Key ${idx})` : ''}`}
+                        disabled={disabled}
+                        autoComplete="off"
+                        className="pl-24 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => toggleShowKey(idx)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        tabIndex={-1}
+                      >
+                        {showKeys[idx] ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+
+                    {idx > 0 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeKeyField(idx)}
+                        disabled={disabled}
+                        className="h-9 w-9 text-muted-foreground hover:text-destructive shrink-0"
+                        title="রিমুভ করুন"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  কীগুলো AES-256-GCM এনক্রিপশনে সুরক্ষিত থাকবে।
+                </p>
                 <Button
+                  type="button"
                   variant="outline"
+                  size="sm"
                   onClick={handleTest}
                   disabled={disabled || testing}
+                  className="h-8 text-xs"
                 >
                   {testing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
                   )}
                   {t('testKey')}
                 </Button>
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 border-t border-border pt-4">
               <Label htmlFor="ai-embeddings-key">
                 {t('embeddingsKey')}{' '}
                 <span className="font-normal text-muted-foreground">
