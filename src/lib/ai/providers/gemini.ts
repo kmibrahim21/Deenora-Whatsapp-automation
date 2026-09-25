@@ -57,8 +57,8 @@ export async function generateGemini(args: ProviderArgs): Promise<ProviderResult
   }
 
   let res: Response
-  try {
-    res = await fetch(
+  const executeCall = async () => {
+    return fetch(
       `${GEMINI_BASE_URL}/${encodeURIComponent(model)}:generateContent`,
       {
         method: 'POST',
@@ -77,6 +77,15 @@ export async function generateGemini(args: ProviderArgs): Promise<ProviderResult
         signal: AbortSignal.timeout(timeoutMs),
       },
     )
+  }
+
+  try {
+    res = await executeCall()
+    // 503 Overloaded / High Demand: retry once after 1s before giving up
+    if (res.status === 503) {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      res = await executeCall()
+    }
   } catch (err) {
     throw toNetworkError(err)
   }
@@ -121,6 +130,19 @@ export async function generateGemini(args: ProviderArgs): Promise<ProviderResult
         {
           code: 'rate_limited',
           status: 429,
+        },
+      )
+    }
+
+    // Gemini high demand / overloaded / 503
+    if (res.status === 503 || /UNAVAILABLE|overloaded|high demand|experiencing high demand/i.test(body) || /UNAVAILABLE|overloaded|high demand|experiencing high demand/i.test(detail)) {
+      throw new AiError(
+        detail
+          ? `Gemini API overloaded (503): ${detail}`
+          : 'Gemini API is currently overloaded due to high demand. Please try again shortly or add a backup key.',
+        {
+          code: 'rate_limited',
+          status: 503,
         },
       )
     }
