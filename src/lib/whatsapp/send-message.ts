@@ -511,6 +511,11 @@ export async function sendMessageToConversation(
       last_message_text: lastMessageText,
       last_message_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      // Reset AI bot state: a human stepping in means the bot gets a
+      // fresh quota if it ever becomes eligible again (e.g. agent
+      // unassigns / conversation closed then reopened).
+      ai_reply_count: 0,
+      ai_autoreply_disabled: false,
     })
     .eq('id', conversationId);
 

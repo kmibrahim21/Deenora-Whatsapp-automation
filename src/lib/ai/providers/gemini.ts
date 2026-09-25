@@ -49,11 +49,12 @@ export async function generateGemini(args: ProviderArgs): Promise<ProviderResult
   const generationConfig: Record<string, unknown> = {
     maxOutputTokens: MAX_OUTPUT_TOKENS,
   }
-  // 2.5 Flash "thinks" by default and thinking tokens count against
-  // maxOutputTokens, which can leave a short reply empty. Turn it off
-  // for Flash models (2.5 Pro can't disable thinking, so don't send it).
-  if (/2\.5-flash/i.test(model)) {
-    generationConfig.thinkingConfig = { thinkingBudget: 0 }
+  // Gemini 3.x Flash models "think" by default and thinking tokens count
+  // against maxOutputTokens. Turn it off for Flash models to ensure
+  // the full output budget is available for the reply.
+  if (/flash/i.test(model)) {
+    // @ts-expect-error newer models support thinkingConfig
+    generationConfig.thinkingConfig = { includeThinking: false }
   }
 
   let res: Response
