@@ -89,25 +89,46 @@ export async function retrieveKnowledge(
   k = 5,
 ): Promise<string[]> {
   const query = queryText.trim()
-  if (!query || k <= 0) return []
+  if (k <= 0) return []
 
-  // Skip everything when the account has no knowledge base — otherwise
-  // every draft / auto-reply would pay for a query embedding + two RPCs
-  // just to get []. One cheap indexed COUNT (head, no rows) instead of a
-  // paid embeddings call on the hot path.
+  // Check how many chunks exist for this account
+  let totalChunks = 0
   try {
     const { count, error } = await db
       .from('ai_knowledge_chunks')
       .select('id', { count: 'exact', head: true })
       .eq('account_id', accountId)
     if (error || !count) return []
+    totalChunks = count
   } catch {
     return []
   }
 
+  // If the total knowledge base is compact (<= 25 chunks), feed ALL chunks
+  // directly so the AI has 100% complete memory without relying on search/FTS.
+  if (totalChunks <= 25) {
+    try {
+      let builder = db
+        .from('ai_knowledge_chunks')
+        .select('content')
+        .eq('account_id', accountId)
+      if (typeof builder.limit === 'function') {
+        builder = builder.limit(25)
+      }
+      const { data } = await builder
+      if (data && data.length > 0) {
+        return data.map((d: { content: string }) => d.content)
+      }
+    } catch (err) {
+      console.error('[ai knowledge] direct full retrieval failed:', err)
+    }
+  }
+
+  if (!query) return []
+
   const picked = new Map<string, string>() // id → content, preserves order
 
-  // Semantic path.
+  // Semantic path (if embeddings key configured)
   if (config.embeddingsApiKey) {
     try {
       const [queryEmbedding] = await embedTexts(config.embeddingsApiKey, [query])
@@ -126,7 +147,7 @@ export async function retrieveKnowledge(
     }
   }
 
-  // Lexical top-up (also the sole path when there's no embeddings key).
+  // Lexical top-up (FTS)
   if (picked.size < k) {
     try {
       const { data, error } = await db.rpc('match_ai_knowledge_fts', {
@@ -142,6 +163,25 @@ export async function retrieveKnowledge(
       }
     } catch (err) {
       console.error('[ai knowledge] lexical retrieval failed:', err)
+    }
+  }
+
+  // Fallback: if search produced no matches, grab recent chunks so context is never empty
+  if (picked.size === 0) {
+    try {
+      let builder = db
+        .from('ai_knowledge_chunks')
+        .select('id, content')
+        .eq('account_id', accountId)
+      if (typeof builder.limit === 'function') {
+        builder = builder.limit(k)
+      }
+      const { data } = await builder
+      if (data) {
+        for (const row of data as MatchRow[]) picked.set(row.id, row.content)
+      }
+    } catch {
+      // Ignore
     }
   }
 
