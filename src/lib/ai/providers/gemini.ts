@@ -53,7 +53,6 @@ export async function generateGemini(args: ProviderArgs): Promise<ProviderResult
   // against maxOutputTokens. Turn it off for Flash models to ensure
   // the full output budget is available for the reply.
   if (/flash/i.test(model)) {
-    // @ts-expect-error newer models support thinkingConfig
     generationConfig.thinkingConfig = { includeThinking: false }
   }
 
