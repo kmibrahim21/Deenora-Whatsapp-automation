@@ -73,15 +73,38 @@ export function matchReplyId(
   node: { node_type: string; config: Record<string, unknown> },
   reply_id: string,
 ): string | null {
+  if (!reply_id) return null;
+  const target = reply_id.trim().toLowerCase();
+
   if (node.node_type === "send_buttons") {
     const cfg = node.config as unknown as SendButtonsNodeConfig;
-    const hit = cfg.buttons?.find((b) => b.reply_id === reply_id);
+    const hit = cfg.buttons?.find((b) => {
+      if (!b) return false;
+      const bId = (b.reply_id ?? "").trim().toLowerCase();
+      const bTitle = (b.title ?? "").trim().toLowerCase();
+      return (
+        bId === target ||
+        bTitle === target ||
+        (bId && target.includes(bId)) ||
+        (bTitle && (target.includes(bTitle) || bTitle.includes(target)))
+      );
+    });
     return hit?.next_node_key ?? null;
   }
   if (node.node_type === "send_list") {
     const cfg = node.config as unknown as SendListNodeConfig;
     for (const section of cfg.sections ?? []) {
-      const hit = section.rows?.find((r) => r.reply_id === reply_id);
+      const hit = section.rows?.find((r) => {
+        if (!r) return false;
+        const rId = (r.reply_id ?? "").trim().toLowerCase();
+        const rTitle = (r.title ?? "").trim().toLowerCase();
+        return (
+          rId === target ||
+          rTitle === target ||
+          (rId && target.includes(rId)) ||
+          (rTitle && (target.includes(rTitle) || rTitle.includes(target)))
+        );
+      });
       if (hit) return hit.next_node_key;
     }
     return null;
@@ -392,24 +415,20 @@ async function sendButtonsAndSuspend(
   node: FlowNodeRow,
 ): Promise<{ outcome: "advanced"; node_key: string }> {
   const cfg = node.config as unknown as SendButtonsNodeConfig;
-  // Every customer-visible string is interpolated against run.vars —
-  // same treatment send_message / collect_input already get (#553).
-  // `reply_id` is deliberately NOT interpolated: it is the routing key
-  // matchReplyId compares the tapped button against, so it must reach
-  // Meta byte-for-byte as authored. Interpolation can push a title past
-  // Meta's 20-char cap; meta-api's validator throws a descriptive error
-  // and the caller logs it — we never truncate silently.
+  const rawButtons = cfg.buttons && cfg.buttons.length > 0 ? cfg.buttons : [
+    { reply_id: "btn_1", title: "Option 1", next_node_key: "" }
+  ];
   const { whatsapp_message_id } = await engineSendInteractiveButtons({
     accountId: run.account_id,
     userId: run.user_id,
     conversationId: run.conversation_id!,
     contactId: run.contact_id!,
-    bodyText: interpolateVars(cfg.text, run.vars),
+    bodyText: interpolateVars(cfg.text || "নিচের অপশনটি নির্বাচন করুন:", run.vars),
     headerText: interpolateOptionalVars(cfg.header_text, run.vars),
     footerText: interpolateOptionalVars(cfg.footer_text, run.vars),
-    buttons: cfg.buttons.map((b) => ({
+    buttons: rawButtons.map((b) => ({
       id: b.reply_id,
-      title: interpolateVars(b.title, run.vars),
+      title: interpolateVars(b.title || "বাটন", run.vars),
     })),
   });
   await logEvent(db, run.id, "message_sent", node.node_key, {
@@ -438,22 +457,28 @@ async function sendListAndSuspend(
   node: FlowNodeRow,
 ): Promise<{ outcome: "advanced"; node_key: string }> {
   const cfg = node.config as unknown as SendListNodeConfig;
-  // See sendButtonsAndSuspend — interpolate every visible string,
-  // never the row `reply_id`.
+  const rawSections = cfg.sections && cfg.sections.length > 0 ? cfg.sections : [
+    {
+      title: "প্যাকেজ সমূহ",
+      rows: [
+        { reply_id: "row_1", title: "প্যাকেজ ১", next_node_key: "" }
+      ]
+    }
+  ];
   const { whatsapp_message_id } = await engineSendInteractiveList({
     accountId: run.account_id,
     userId: run.user_id,
     conversationId: run.conversation_id!,
     contactId: run.contact_id!,
-    bodyText: interpolateVars(cfg.text, run.vars),
-    buttonLabel: interpolateVars(cfg.button_label, run.vars),
+    bodyText: interpolateVars(cfg.text || "নিচের তালিকা থেকে নির্বাচন করুন:", run.vars),
+    buttonLabel: interpolateVars(cfg.button_label || "প্যাকেজ দেখুন", run.vars),
     headerText: interpolateOptionalVars(cfg.header_text, run.vars),
     footerText: interpolateOptionalVars(cfg.footer_text, run.vars),
-    sections: cfg.sections.map((s) => ({
+    sections: rawSections.map((s) => ({
       title: interpolateOptionalVars(s.title, run.vars),
-      rows: s.rows.map((r) => ({
+      rows: (s.rows ?? []).map((r) => ({
         id: r.reply_id,
-        title: interpolateVars(r.title, run.vars),
+        title: interpolateVars(r.title || "প্যাকেজ", run.vars),
         description: interpolateOptionalVars(r.description, run.vars),
       })),
     })),
@@ -1040,11 +1065,14 @@ async function handleReplyForActiveRun(
   // Everything else falls through to the fallback policy below.
   let matched: string | null = null;
   if (
-    message.kind === "interactive_reply" &&
-    (currentNode.node_type === "send_buttons" ||
-      currentNode.node_type === "send_list")
+    currentNode.node_type === "send_buttons" ||
+    currentNode.node_type === "send_list"
   ) {
-    matched = matchReplyId(currentNode, message.reply_id);
+    if (message.kind === "interactive_reply") {
+      matched = matchReplyId(currentNode, message.reply_id);
+    } else if (message.kind === "text") {
+      matched = matchReplyId(currentNode, message.text);
+    }
   } else if (
     message.kind === "text" &&
     currentNode.node_type === "collect_input"

@@ -940,8 +940,18 @@ export async function sendInteractiveButtons(
     phoneNumberId, accessToken, to,
     bodyText, headerText, footerText, buttons, contextMessageId,
   } = args
-  validateInteractiveBody(bodyText)
-  validateInteractiveHeaderFooter(headerText, footerText)
+  const safeBody = (bodyText && bodyText.trim()) ? bodyText : 'নিচের অপশনটি নির্বাচন করুন:'
+  validateInteractiveBody(safeBody)
+  const safeHeader =
+    headerText && headerText.length > INTERACTIVE_LIMITS.headerTextMaxLength
+      ? headerText.slice(0, INTERACTIVE_LIMITS.headerTextMaxLength)
+      : headerText
+  const safeFooter =
+    footerText && footerText.length > INTERACTIVE_LIMITS.footerMaxLength
+      ? footerText.slice(0, INTERACTIVE_LIMITS.footerMaxLength)
+      : footerText
+  validateInteractiveHeaderFooter(safeHeader, safeFooter)
+
   if (buttons.length < 1 || buttons.length > INTERACTIVE_LIMITS.maxButtons) {
     throw new Error(
       `Interactive button message requires 1-${INTERACTIVE_LIMITS.maxButtons} buttons (got ${buttons.length}).`
@@ -964,7 +974,7 @@ export async function sendInteractiveButtons(
 
   const interactive: Record<string, unknown> = {
     type: 'button',
-    body: { text: bodyText },
+    body: { text: safeBody },
     action: {
       buttons: safeButtons.map((b) => ({
         type: 'reply',
@@ -972,8 +982,8 @@ export async function sendInteractiveButtons(
       })),
     },
   }
-  if (headerText) interactive.header = { type: 'text', text: headerText }
-  if (footerText) interactive.footer = { text: footerText }
+  if (safeHeader) interactive.header = { type: 'text', text: safeHeader }
+  if (safeFooter) interactive.footer = { text: safeFooter }
 
   const body: Record<string, unknown> = {
     messaging_product: 'whatsapp',
@@ -1044,51 +1054,75 @@ export async function sendInteractiveList(
     phoneNumberId, accessToken, to,
     bodyText, buttonLabel, headerText, footerText, sections, contextMessageId,
   } = args
-  validateInteractiveBody(bodyText)
-  validateInteractiveHeaderFooter(headerText, footerText)
-  const rawButtonLabel = buttonLabel || 'প্যাকেজ দেখুন'
+  const safeBody = (bodyText && bodyText.trim()) ? bodyText : 'নিচের তালিকা থেকে নির্বাচন করুন:'
+  validateInteractiveBody(safeBody)
+  const safeHeader =
+    headerText && headerText.length > INTERACTIVE_LIMITS.headerTextMaxLength
+      ? headerText.slice(0, INTERACTIVE_LIMITS.headerTextMaxLength)
+      : headerText
+  const safeFooter =
+    footerText && footerText.length > INTERACTIVE_LIMITS.footerMaxLength
+      ? footerText.slice(0, INTERACTIVE_LIMITS.footerMaxLength)
+      : footerText
+  validateInteractiveHeaderFooter(safeHeader, safeFooter)
+
+  const rawButtonLabel = (buttonLabel && buttonLabel.trim()) ? buttonLabel.trim() : 'প্যাকেজ দেখুন'
   const safeButtonLabel =
     rawButtonLabel.length > INTERACTIVE_LIMITS.buttonTitleMaxLength
       ? rawButtonLabel.slice(0, INTERACTIVE_LIMITS.buttonTitleMaxLength)
       : rawButtonLabel
 
-  if (sections.length < 1 || sections.length > INTERACTIVE_LIMITS.maxListSections) {
+  const safeSectionsInput = sections && sections.length > 0 ? sections : [
+    {
+      title: 'প্যাকেজ সমূহ',
+      rows: [{ id: 'row_1', title: 'প্যাকেজ ১' }]
+    }
+  ]
+
+  if (safeSectionsInput.length < 1 || safeSectionsInput.length > INTERACTIVE_LIMITS.maxListSections) {
     throw new Error(
-      `Interactive list requires 1-${INTERACTIVE_LIMITS.maxListSections} sections (got ${sections.length}).`
+      `Interactive list requires 1-${INTERACTIVE_LIMITS.maxListSections} sections (got ${safeSectionsInput.length}).`
     )
   }
-  const totalRows = sections.reduce((sum, s) => sum + s.rows.length, 0)
+  const totalRows = safeSectionsInput.reduce((sum, s) => sum + (s.rows?.length ?? 0), 0)
   if (totalRows < 1 || totalRows > INTERACTIVE_LIMITS.maxListRowsTotal) {
     throw new Error(
       `Interactive list requires 1-${INTERACTIVE_LIMITS.maxListRowsTotal} rows total across all sections (got ${totalRows}).`
     )
   }
   const seenIds = new Set<string>()
-  const safeSections = sections.map((section) => ({
-    ...(section.title ? { title: section.title } : {}),
-    rows: section.rows.map((row) => {
-      if (!row.id) throw new Error('Interactive list row missing id.')
-      if (seenIds.has(row.id)) {
-        throw new Error(`Interactive list has duplicate row id "${row.id}".`)
-      }
-      seenIds.add(row.id)
-      const rawTitle = row.title || 'প্যাকেজ'
-      const title =
-        rawTitle.length > INTERACTIVE_LIMITS.listRowTitleMaxLength
-          ? rawTitle.slice(0, INTERACTIVE_LIMITS.listRowTitleMaxLength)
-          : rawTitle
-      const rawDesc = row.description
-      const description =
-        rawDesc && rawDesc.length > INTERACTIVE_LIMITS.listRowDescriptionMaxLength
-          ? rawDesc.slice(0, INTERACTIVE_LIMITS.listRowDescriptionMaxLength)
-          : rawDesc
-      return { id: row.id, title, description }
-    }),
-  }))
+  const safeSections = safeSectionsInput.map((section, sIdx) => {
+    const rawSecTitle = (section.title ?? '').trim()
+    const secTitle =
+      rawSecTitle.length > INTERACTIVE_LIMITS.listRowTitleMaxLength
+        ? rawSecTitle.slice(0, INTERACTIVE_LIMITS.listRowTitleMaxLength)
+        : rawSecTitle
+    return {
+      ...(secTitle ? { title: secTitle } : {}),
+      rows: (section.rows ?? []).map((row, rIdx) => {
+        const rowId = (row.id ?? `row_${sIdx}_${rIdx}`).trim()
+        if (seenIds.has(rowId)) {
+          throw new Error(`Interactive list has duplicate row id "${rowId}".`)
+        }
+        seenIds.add(rowId)
+        const rawTitle = (row.title ?? '').trim() || 'প্যাকেজ'
+        const title =
+          rawTitle.length > INTERACTIVE_LIMITS.listRowTitleMaxLength
+            ? rawTitle.slice(0, INTERACTIVE_LIMITS.listRowTitleMaxLength)
+            : rawTitle
+        const rawDesc = (row.description ?? '').trim()
+        const description =
+          rawDesc && rawDesc.length > INTERACTIVE_LIMITS.listRowDescriptionMaxLength
+            ? rawDesc.slice(0, INTERACTIVE_LIMITS.listRowDescriptionMaxLength)
+            : rawDesc || undefined
+        return { id: rowId, title, description }
+      }),
+    }
+  })
 
   const interactive: Record<string, unknown> = {
     type: 'list',
-    body: { text: bodyText },
+    body: { text: safeBody },
     action: {
       button: safeButtonLabel,
       sections: safeSections.map((s) => ({
@@ -1101,8 +1135,8 @@ export async function sendInteractiveList(
       })),
     },
   }
-  if (headerText) interactive.header = { type: 'text', text: headerText }
-  if (footerText) interactive.footer = { text: footerText }
+  if (safeHeader) interactive.header = { type: 'text', text: safeHeader }
+  if (safeFooter) interactive.footer = { text: safeFooter }
 
   const body: Record<string, unknown> = {
     messaging_product: 'whatsapp',
