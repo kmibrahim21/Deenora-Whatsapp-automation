@@ -226,6 +226,8 @@ export default function FlowsPage() {
       {flows.length === 0 ? (
         <EmptyState
           onCreate={() => setCreateOpen(true)}
+          onInstallPreset={() => handleUseTemplate("bengali_course_menu")}
+          creating={creating}
           canCreate={canCreate}
           t={t}
         />
@@ -325,17 +327,21 @@ export default function FlowsPage() {
 
 function EmptyState({
   onCreate,
+  onInstallPreset,
+  creating,
   canCreate,
   t,
 }: {
   onCreate: () => void;
+  onInstallPreset: () => void;
+  creating: boolean;
   canCreate: boolean;
   t: ReturnType<typeof useTranslations>;
 }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 px-6 py-16 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
-        <Workflow className="h-6 w-6 text-muted-foreground" />
+      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <Workflow className="h-6 w-6" />
       </div>
       <h2 className="mt-4 text-base font-medium text-foreground">
         {t("emptyTitle")}
@@ -343,15 +349,31 @@ function EmptyState({
       <p className="mt-1 max-w-md text-sm text-muted-foreground">
         {t("emptyDesc")}
       </p>
-      <GatedButton
-        canAct={canCreate}
-        gateReason="create flows"
-        onClick={onCreate}
-        className="mt-5"
-      >
-        <Plus className="h-4 w-4" />
-        {t("createFirst")}
-      </GatedButton>
+
+      <div className="mt-6 flex flex-col sm:flex-row items-center gap-3">
+        <Button
+          onClick={onInstallPreset}
+          disabled={creating || !canCreate}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+        >
+          {creating ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Workflow className="h-4 w-4" />
+          )}
+          ১-ক্লিকে ইনস্টল করুন (কোর্স, ডেমো ও প্রাইসিং মেনু)
+        </Button>
+
+        <GatedButton
+          canAct={canCreate}
+          gateReason="create flows"
+          onClick={onCreate}
+          variant="outline"
+        >
+          <Plus className="h-4 w-4" />
+          {t("createFirst")}
+        </GatedButton>
+      </div>
     </div>
   );
 }

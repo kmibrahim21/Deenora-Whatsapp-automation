@@ -286,11 +286,143 @@ const LEAD_CAPTURE: FlowTemplate = {
 };
 
 // ============================================================
+// 4. Course & Pricing Menu (বাংলা কোর্স ও প্রাইসিং ফ্লো)
+// ============================================================
+const BENGALI_COURSE_MENU: FlowTemplate = {
+  slug: "bengali_course_menu",
+  name: "কোর্স, ডেমো ও প্রাইসিং মেনু (Interactive Menu Flow)",
+  description:
+    "কাস্টমার hi/hello/সালাম দিলে স্বয়ংক্রিয় মেনু মেসেজ পাঠানো হবে এবং বাটন ক্লিক করে ডেমো, ফিচার ও শিক্ষার্থী সংখ্যা অনুযায়ী প্রাইসিং প্যাকেজ দেখতে পারবে।",
+  icon: "HelpCircle",
+  trigger_type: "keyword",
+  trigger_config: {
+    keywords: [
+      "hi",
+      "hello",
+      "hey",
+      "assalamualaikum",
+      "ওয়ালাইকুম",
+      "সালাম",
+      "আসসালামু",
+      "start",
+      "menu",
+      "apu",
+      "ভাই",
+    ],
+    match_type: "contains",
+  },
+  entry_node_id: "start",
+  nodes: [
+    {
+      node_key: "start",
+      node_type: "start",
+      config: { next_node_key: "main_menu" },
+    },
+    {
+      node_key: "main_menu",
+      node_type: "send_buttons",
+      config: {
+        text: "আসসালামু আলাইকুম! 👋 আমাদের সিস্টেমে আপনাকে স্বাগতম। আপনাকে কীভাবে সাহায্য করতে পারি? নিচের যেকোনো একটি অপশনে ক্লিক করুন:",
+        footer_text: "যেকোনো একটি বাটন নির্বাচন করুন",
+        buttons: [
+          {
+            reply_id: "demo",
+            title: "Demo / ডেমো",
+            next_node_key: "send_demo",
+          },
+          {
+            reply_id: "price",
+            title: "Price / প্রাইস",
+            next_node_key: "ask_students",
+          },
+          {
+            reply_id: "features",
+            title: "Features / ফিচার",
+            next_node_key: "send_features",
+          },
+        ],
+      } as SendButtonsNodeConfig,
+    },
+    {
+      node_key: "send_demo",
+      node_type: "send_message",
+      config: {
+        text: "📌 আমাদের ডেমো টিউটোরিয়াল ও বিস্তারিত ভিডিও দেখতে নিচের লিংকে ক্লিক করুন:\n\n👉 Demo Link: https://example.com/demo\n\nঅন্য কোনো বিষয়ে জানতে চাইলে আমাদের মেসেজ দিন!",
+        next_node_key: "end",
+      } as SendMessageNodeConfig,
+    },
+    {
+      node_key: "send_features",
+      node_type: "send_message",
+      config: {
+        text: "✨ আমাদের সিস্টেমের প্রধান প্রধান ফিচারসমূহ:\n\n1. অটোমেটিক হোয়াটসঅ্যাপ মেসেজিং ও ফলোআপ\n2. স্মার্ট এআই চ্যাটবট ও নলেজ বেস\n3. স্টুডেন্ট ও কাস্টমার সিআরএম\n4. অটোমেটিক পেমেন্ট রিমাইন্ডার ও রিপোর্ট\n\nসরাসরি কথা বলতে চাইলে মেসেজ দিন।",
+        next_node_key: "end",
+      } as SendMessageNodeConfig,
+    },
+    {
+      node_key: "ask_students",
+      node_type: "send_buttons",
+      config: {
+        text: "আপনার প্রতিষ্ঠানে বা ব্যাচে মোট কতজন শিক্ষার্থী রয়েছে? আপনার প্যাকেজ নির্বাচন করুন:",
+        footer_text: "শিক্ষার্থী সংখ্যা বেছে নিন",
+        buttons: [
+          {
+            reply_id: "students_100",
+            title: "১০০ জন",
+            next_node_key: "pkg_100",
+          },
+          {
+            reply_id: "students_200",
+            title: "২০০ জন",
+            next_node_key: "pkg_200",
+          },
+          {
+            reply_id: "students_300",
+            title: "৩০০+ জন",
+            next_node_key: "pkg_300",
+          },
+        ],
+      } as SendButtonsNodeConfig,
+    },
+    {
+      node_key: "pkg_100",
+      node_type: "send_message",
+      config: {
+        text: "🎯 ১০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ১,৫০০ টাকা/মাস\n• সকল বেসিক ফিচার অন্তর্ভুক্ত\n• ২৪/৭ সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
+        next_node_key: "end",
+      } as SendMessageNodeConfig,
+    },
+    {
+      node_key: "pkg_200",
+      node_type: "send_message",
+      config: {
+        text: "🎯 ২০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ২,৫০০ টাকা/মাস\n• প্রিমিয়াম ফিচার + হোয়াটসঅ্যাপ অটোমেশন\n• ডেডিকেটেড সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
+        next_node_key: "end",
+      } as SendMessageNodeConfig,
+    },
+    {
+      node_key: "pkg_300",
+      node_type: "send_message",
+      config: {
+        text: "🎯 ৩০০+ জন শিক্ষার্থীর জন্য এন্টারপ্রাইজ প্যাকেজ:\n\n• মূল্য: ৩,৫০০ টাকা/মাস\n• আনলিমিটেড স্টুডেন্ট ও অটোমেশন\n• ভিআইপি সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
+        next_node_key: "end",
+      } as SendMessageNodeConfig,
+    },
+    {
+      node_key: "end",
+      node_type: "end",
+      config: {},
+    },
+  ],
+};
+
+// ============================================================
 // Registry
 // ============================================================
 
 const TEMPLATES: Record<string, FlowTemplate> = {
   welcome_menu: WELCOME_MENU,
+  bengali_course_menu: BENGALI_COURSE_MENU,
   faq_bot: FAQ_BOT,
   lead_capture: LEAD_CAPTURE,
 };
