@@ -948,28 +948,25 @@ export async function sendInteractiveButtons(
     )
   }
   const seenButtonIds = new Set<string>()
-  for (const btn of buttons) {
+  const safeButtons = buttons.map((btn) => {
     if (!btn.id) throw new Error('Interactive button missing id.')
-    // Duplicate button ids make the tapped-button webhook ambiguous —
-    // Meta rejects them, and the pre-flight validator (interactive.ts)
-    // rejects them too, so guard here to keep the two paths in step.
     if (seenButtonIds.has(btn.id)) {
       throw new Error(`Interactive message has duplicate button id "${btn.id}".`)
     }
     seenButtonIds.add(btn.id)
-    if (!btn.title) throw new Error(`Interactive button "${btn.id}" missing title.`)
-    if (btn.title.length > INTERACTIVE_LIMITS.buttonTitleMaxLength) {
-      throw new Error(
-        `Interactive button title "${btn.title}" exceeds ${INTERACTIVE_LIMITS.buttonTitleMaxLength} chars.`
-      )
-    }
-  }
+    const rawTitle = btn.title || 'বাটন'
+    const title =
+      rawTitle.length > INTERACTIVE_LIMITS.buttonTitleMaxLength
+        ? rawTitle.slice(0, INTERACTIVE_LIMITS.buttonTitleMaxLength)
+        : rawTitle
+    return { id: btn.id, title }
+  })
 
   const interactive: Record<string, unknown> = {
     type: 'button',
     body: { text: bodyText },
     action: {
-      buttons: buttons.map((b) => ({
+      buttons: safeButtons.map((b) => ({
         type: 'reply',
         reply: { id: b.id, title: b.title },
       })),
@@ -1049,12 +1046,12 @@ export async function sendInteractiveList(
   } = args
   validateInteractiveBody(bodyText)
   validateInteractiveHeaderFooter(headerText, footerText)
-  if (!buttonLabel) throw new Error('Interactive list requires a buttonLabel.')
-  if (buttonLabel.length > INTERACTIVE_LIMITS.buttonTitleMaxLength) {
-    throw new Error(
-      `Interactive list buttonLabel "${buttonLabel}" exceeds ${INTERACTIVE_LIMITS.buttonTitleMaxLength} chars.`
-    )
-  }
+  const rawButtonLabel = buttonLabel || 'প্যাকেজ দেখুন'
+  const safeButtonLabel =
+    rawButtonLabel.length > INTERACTIVE_LIMITS.buttonTitleMaxLength
+      ? rawButtonLabel.slice(0, INTERACTIVE_LIMITS.buttonTitleMaxLength)
+      : rawButtonLabel
+
   if (sections.length < 1 || sections.length > INTERACTIVE_LIMITS.maxListSections) {
     throw new Error(
       `Interactive list requires 1-${INTERACTIVE_LIMITS.maxListSections} sections (got ${sections.length}).`
@@ -1067,36 +1064,34 @@ export async function sendInteractiveList(
     )
   }
   const seenIds = new Set<string>()
-  for (const section of sections) {
-    for (const row of section.rows) {
+  const safeSections = sections.map((section) => ({
+    ...(section.title ? { title: section.title } : {}),
+    rows: section.rows.map((row) => {
       if (!row.id) throw new Error('Interactive list row missing id.')
       if (seenIds.has(row.id)) {
         throw new Error(`Interactive list has duplicate row id "${row.id}".`)
       }
       seenIds.add(row.id)
-      if (!row.title) throw new Error(`Interactive list row "${row.id}" missing title.`)
-      if (row.title.length > INTERACTIVE_LIMITS.listRowTitleMaxLength) {
-        throw new Error(
-          `Interactive list row title "${row.title}" exceeds ${INTERACTIVE_LIMITS.listRowTitleMaxLength} chars.`
-        )
-      }
-      if (
-        row.description &&
-        row.description.length > INTERACTIVE_LIMITS.listRowDescriptionMaxLength
-      ) {
-        throw new Error(
-          `Interactive list row description for "${row.id}" exceeds ${INTERACTIVE_LIMITS.listRowDescriptionMaxLength} chars.`
-        )
-      }
-    }
-  }
+      const rawTitle = row.title || 'প্যাকেজ'
+      const title =
+        rawTitle.length > INTERACTIVE_LIMITS.listRowTitleMaxLength
+          ? rawTitle.slice(0, INTERACTIVE_LIMITS.listRowTitleMaxLength)
+          : rawTitle
+      const rawDesc = row.description
+      const description =
+        rawDesc && rawDesc.length > INTERACTIVE_LIMITS.listRowDescriptionMaxLength
+          ? rawDesc.slice(0, INTERACTIVE_LIMITS.listRowDescriptionMaxLength)
+          : rawDesc
+      return { id: row.id, title, description }
+    }),
+  }))
 
   const interactive: Record<string, unknown> = {
     type: 'list',
     body: { text: bodyText },
     action: {
-      button: buttonLabel,
-      sections: sections.map((s) => ({
+      button: safeButtonLabel,
+      sections: safeSections.map((s) => ({
         ...(s.title ? { title: s.title } : {}),
         rows: s.rows.map((r) => ({
           id: r.id,
