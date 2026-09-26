@@ -114,7 +114,7 @@ export async function POST(request: Request) {
         account_id: accountId,
         name: body.name?.trim() || template.name,
         description: template.description,
-        status: 'active',
+        status: 'draft',
         trigger_type: template.trigger_type,
         trigger_config: template.trigger_config,
         entry_node_id: template.entry_node_id,

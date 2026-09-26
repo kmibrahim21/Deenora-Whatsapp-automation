@@ -314,16 +314,6 @@ const BENGALI_COURSE_MENU: FlowTemplate = {
       "ডেমো",
       "প্রাইস",
       "ফিচার",
-      "prize",
-      "dam",
-      "প্যাকেজ",
-      "package",
-      "free",
-      "ফ্রি",
-      "কত",
-      "koto",
-      "দাম",
-      "মূল্য",
       "students_200",
       "students_300",
       "students_400",
@@ -389,7 +379,7 @@ const BENGALI_COURSE_MENU: FlowTemplate = {
       node_type: "send_list",
       config: {
         text: "আপনার প্রতিষ্ঠানে বা ব্যাচে মোট কতজন শিক্ষার্থী রয়েছে? নিচের তালিকা থেকে আপনার উপযুক্ত প্যাকেজটি নির্বাচন করুন:",
-        button_label: "প্যাকেজ দেখুন",
+        button_label: "প্যাকেজ নির্বাচন করুন 📋",
         sections: [
           {
             title: "প্যাকেজ সমূহ (২০০ - ১০০০+ জন)",
@@ -534,205 +524,12 @@ const BENGALI_COURSE_MENU: FlowTemplate = {
 };
 
 // ============================================================
-// 5. Direct 9 Packages Pricing Flow (সরাসরি ৯টি প্যাকেজের তালিকা)
-// ============================================================
-const BENGALI_PRICING_FLOW: FlowTemplate = {
-  slug: "bengali_pricing_flow",
-  name: "সরাসরি প্যাকেজ ও দামের তালিকা (Direct 9 Packages Menu)",
-  description:
-    "কাস্টমার prize, dam, প্যাকেজ, package, free, ফ্রি, কত, koto ইত্যাদি লিখে মেসেজ দিলে সরাসরি ২০০ থেকে ১০০০ জন শিক্ষার্থীর ৯টি প্যাকেজ তালিকা দেখাবে।",
-  icon: "HelpCircle",
-  trigger_type: "keyword",
-  trigger_config: {
-    keywords: [
-      "prize",
-      "price",
-      "dam",
-      "দাম",
-      "প্যাকেজ",
-      "package",
-      "free",
-      "ফ্রি",
-      "কত",
-      "koto",
-      "মূল্য",
-      "প্যাকেজ কত",
-      "students_200",
-      "students_300",
-      "students_400",
-      "students_500",
-      "students_600",
-      "students_700",
-      "students_800",
-      "students_900",
-      "students_1000",
-    ],
-    match_type: "contains",
-  },
-  entry_node_id: "start",
-  nodes: [
-    {
-      node_key: "start",
-      node_type: "start",
-      config: { next_node_key: "ask_students" },
-    },
-    {
-      node_key: "ask_students",
-      node_type: "send_list",
-      config: {
-        text: "আসসালামু আলাইকুম! 👋 আপনার প্রতিষ্ঠানে বা ব্যাচে মোট কতজন শিক্ষার্থী রয়েছে? নিচের তালিকা থেকে আপনার উপযুক্ত প্যাকেজটি সিলেক্ট করে মূল্য জেনে নিন:",
-        button_label: "প্যাকেজ দেখুন",
-        sections: [
-          {
-            title: "শিক্ষার্থী অনুযায়ী প্যাকেজ (২০০-১০০০+)",
-            rows: [
-              {
-                reply_id: "students_200",
-                title: "২০০ জন শিক্ষার্থী",
-                description: "২০০ জন শিক্ষার্থীর জন্য প্রিমিয়াম প্যাকেজ",
-                next_node_key: "pkg_200",
-              },
-              {
-                reply_id: "students_300",
-                title: "৩০০ জন শিক্ষার্থী",
-                description: "৩০০ জন শিক্ষার্থীর জন্য গ্রোথ প্যাকেজ",
-                next_node_key: "pkg_300",
-              },
-              {
-                reply_id: "students_400",
-                title: "৪০০ জন শিক্ষার্থী",
-                description: "৪০০ জন শিক্ষার্থীর জন্য প্রফেশনাল প্যাকেজ",
-                next_node_key: "pkg_400",
-              },
-              {
-                reply_id: "students_500",
-                title: "৫০০ জন শিক্ষার্থী",
-                description: "৫০০ জন শিক্ষার্থীর জন্য বিজনেস প্যাকেজ",
-                next_node_key: "pkg_500",
-              },
-              {
-                reply_id: "students_600",
-                title: "৬০০ জন শিক্ষার্থী",
-                description: "৬০০ জন শিক্ষার্থীর জন্য প্লাস প্যাকেজ",
-                next_node_key: "pkg_600",
-              },
-              {
-                reply_id: "students_700",
-                title: "৭০০ জন শিক্ষার্থী",
-                description: "৭০০ জন শিক্ষার্থীর জন্য প্রিমিয়াম প্যাকেজ",
-                next_node_key: "pkg_700",
-              },
-              {
-                reply_id: "students_800",
-                title: "৮০০ জন শিক্ষার্থী",
-                description: "৮০০ জন শিক্ষার্থীর জন্য আলটিমেট প্যাকেজ",
-                next_node_key: "pkg_800",
-              },
-              {
-                reply_id: "students_900",
-                title: "৯০০ জন শিক্ষার্থী",
-                description: "৯০০ জন শিক্ষার্থীর জন্য সুপ্রিম প্যাকেজ",
-                next_node_key: "pkg_900",
-              },
-              {
-                reply_id: "students_1000",
-                title: "১০০০+ জন শিক্ষার্থী",
-                description: "১০০০+ জন শিক্ষার্থীদের জন্য এন্টারপ্রাইজ প্যাকেজ",
-                next_node_key: "pkg_1000",
-              },
-            ],
-          },
-        ],
-      } as SendListNodeConfig,
-    },
-    {
-      node_key: "pkg_200",
-      node_type: "send_message",
-      config: {
-        text: "🎯 ২০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ২,০০০ টাকা/মাস\n• প্রিমিয়াম ফিচার + হোয়াটসঅ্যাপ অটোমেশন\n• ডেডিকেটেড সাপোর্ট\n\nভর্তি হতে বা নিতে আমাদের মেসেজ দিন!",
-        next_node_key: "end",
-      } as SendMessageNodeConfig,
-    },
-    {
-      node_key: "pkg_300",
-      node_type: "send_message",
-      config: {
-        text: "🎯 ৩০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ২,৫০০ টাকা/মাস\n• প্রিমিয়াম ফিচার + হোয়াটসঅ্যাপ অটোমেশন\n• ডেডিকেটেড সাপোর্ট\n\nভর্তি হতে বা নিতে আমাদের মেসেজ দিন!",
-        next_node_key: "end",
-      } as SendMessageNodeConfig,
-    },
-    {
-      node_key: "pkg_400",
-      node_type: "send_message",
-      config: {
-        text: "🎯 ৪০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ৩,০০০ টাকা/মাস\n• আনলিমিটেড হোয়াটসঅ্যাপ মেসেজিং\n• ২৪/৭ সাপোর্ট\n\nভর্তি হতে বা নিতে আমাদের মেসেজ দিন!",
-        next_node_key: "end",
-      } as SendMessageNodeConfig,
-    },
-    {
-      node_key: "pkg_500",
-      node_type: "send_message",
-      config: {
-        text: "🎯 ৫০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ৩,৫০০ টাকা/মাস\n• অল-ইন-ওয়ান সিআরএম ও অটোমেশন\n• ডেডিকেটেড একাউন্ট ম্যানেজার\n\nভর্তি হতে বা নিতে আমাদের মেসেজ দিন!",
-        next_node_key: "end",
-      } as SendMessageNodeConfig,
-    },
-    {
-      node_key: "pkg_600",
-      node_type: "send_message",
-      config: {
-        text: "🎯 ৬০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ৪,০০০ টাকা/মাস\n• অল-ইন-ওয়ান সিআরএম ও অটোমেশন\n• ভিআইপি সাপোর্ট\n\nভর্তি হতে বা নিতে আমাদের মেসেজ দিন!",
-        next_node_key: "end",
-      } as SendMessageNodeConfig,
-    },
-    {
-      node_key: "pkg_700",
-      node_type: "send_message",
-      config: {
-        text: "🎯 ৭০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ৪,৫০০ টাকা/মাস\n• এডভান্সড এআই বটের সুবিধা\n• ভিআইপি সাপোর্ট\n\nভর্তি হতে বা নিতে আমাদের মেসেজ দিন!",
-        next_node_key: "end",
-      } as SendMessageNodeConfig,
-    },
-    {
-      node_key: "pkg_800",
-      node_type: "send_message",
-      config: {
-        text: "🎯 ৮০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ৫,০০০ টাকা/মাস\n• এডভান্সড এআই বট + কাস্টম অটোমেশন\n• ভিআইপি সাপোর্ট\n\nভর্তি হতে বা নিতে আমাদের মেসেজ দিন!",
-        next_node_key: "end",
-      } as SendMessageNodeConfig,
-    },
-    {
-      node_key: "pkg_900",
-      node_type: "send_message",
-      config: {
-        text: "🎯 ৯০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ৫,৫০০ টাকা/মাস\n• এডভান্সড এআই বট + কাস্টম অটোমেশন\n• ভিআইপি সাপোর্ট\n\nভর্তি হতে বা নিতে আমাদের মেসেজ দিন!",
-        next_node_key: "end",
-      } as SendMessageNodeConfig,
-    },
-    {
-      node_key: "pkg_1000",
-      node_type: "send_message",
-      config: {
-        text: "🎯 ১০০০+ জন শিক্ষার্থীর জন্য এন্টারপ্রাইজ প্যাকেজ:\n\n• মূল্য: ৬,০০০ টাকা/মাস\n• আনলিমিটেড স্টুডেন্ট, এআই ও কাস্টম ইন্টিগ্রেশন\n• ডেডিকেটেড একাউন্ট ম্যানেজার ও ভিআইপি সাপোর্ট\n\nভর্তি হতে বা নিতে আমাদের মেসেজ দিন!",
-        next_node_key: "end",
-      } as SendMessageNodeConfig,
-    },
-    {
-      node_key: "end",
-      node_type: "end",
-      config: {},
-    },
-  ],
-};
-
-// ============================================================
 // Registry
 // ============================================================
 
 const TEMPLATES: Record<string, FlowTemplate> = {
   welcome_menu: WELCOME_MENU,
   bengali_course_menu: BENGALI_COURSE_MENU,
-  bengali_pricing_flow: BENGALI_PRICING_FLOW,
   faq_bot: FAQ_BOT,
   lead_capture: LEAD_CAPTURE,
 };
