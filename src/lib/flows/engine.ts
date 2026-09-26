@@ -946,9 +946,32 @@ export async function dispatchInboundToFlows(
           outcome: "duplicate_inbound_ignored",
         };
       }
-      // One SELECT for the whole flow's nodes — advance loop is now
-      // in-memory. See loadAllNodes.
+
+      // Check if message matches an active flow entry trigger.
+      const matchingEntryFlow = await findEntryFlow(
+        db,
+        input.accountId,
+        input.message,
+        input.isFirstInboundMessage,
+      );
+
       const nodes = await loadAllNodes(db, activeRun.flow_id);
+      const currentNode = activeRun.current_node_key
+        ? nodes.get(activeRun.current_node_key)
+        : null;
+      const matchesCurrentNode =
+        currentNode && input.message.kind === "interactive_reply"
+          ? matchReplyId(currentNode, input.message.reply_id)
+          : null;
+
+      // If the message matches a flow entry trigger and is NOT a button tap for the active run,
+      // supercede the old run and start the new flow immediately.
+      if (matchingEntryFlow && !matchesCurrentNode) {
+        await endRun(db, activeRun.id, "completed", "superceded_by_new_trigger");
+        const newFlowNodes = await loadAllNodes(db, matchingEntryFlow.id);
+        return startNewRun(db, matchingEntryFlow, input, newFlowNodes);
+      }
+
       return handleReplyForActiveRun(db, activeRun, input.message, nodes);
     }
 
