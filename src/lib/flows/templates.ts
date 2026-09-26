@@ -292,7 +292,7 @@ const BENGALI_COURSE_MENU: FlowTemplate = {
   slug: "bengali_course_menu",
   name: "কোর্স, ডেমো ও প্রাইসিং মেনু (Interactive Menu Flow)",
   description:
-    "কাস্টমার hi/hello/সালাম দিলে স্বয়ংক্রিয় মেনু মেসেজ পাঠানো হবে এবং বাটন ক্লিক করে ডেমো, ফিচার ও শিক্ষার্থী সংখ্যা অনুযায়ী প্রাইসিং প্যাকেজ দেখতে পারবে।",
+    "কাস্টমার hi/hello/সালাম দিলে স্বয়ংক্রিয় মেনু মেসেজ পাঠানো হবে এবং ডেমো, ফিচার ও ২০০ থেকে ১০০০ জন শিক্ষার্থী অনুযায়ী ৯টি প্যাকেজের প্রাইসিং দেখতে পারবে।",
   icon: "HelpCircle",
   trigger_type: "keyword",
   trigger_config: {
@@ -308,6 +308,21 @@ const BENGALI_COURSE_MENU: FlowTemplate = {
       "menu",
       "apu",
       "ভাই",
+      "demo",
+      "price",
+      "features",
+      "ডেমো",
+      "প্রাইস",
+      "ফিচার",
+      "students_200",
+      "students_300",
+      "students_400",
+      "students_500",
+      "students_600",
+      "students_700",
+      "students_800",
+      "students_900",
+      "students_1000",
     ],
     match_type: "contains",
   },
@@ -361,42 +376,78 @@ const BENGALI_COURSE_MENU: FlowTemplate = {
     },
     {
       node_key: "ask_students",
-      node_type: "send_buttons",
+      node_type: "send_list",
       config: {
-        text: "আপনার প্রতিষ্ঠানে বা ব্যাচে মোট কতজন শিক্ষার্থী রয়েছে? আপনার প্যাকেজ নির্বাচন করুন:",
-        footer_text: "শিক্ষার্থী সংখ্যা বেছে নিন",
-        buttons: [
+        text: "আপনার প্রতিষ্ঠানে বা ব্যাচে মোট কতজন শিক্ষার্থী রয়েছে? নিচের তালিকা থেকে আপনার উপযুক্ত প্যাকেজটি নির্বাচন করুন:",
+        button_label: "প্যাকেজ নির্বাচন করুন 📋",
+        sections: [
           {
-            reply_id: "students_100",
-            title: "১০০ জন",
-            next_node_key: "pkg_100",
-          },
-          {
-            reply_id: "students_200",
-            title: "২০০ জন",
-            next_node_key: "pkg_200",
-          },
-          {
-            reply_id: "students_300",
-            title: "৩০০+ জন",
-            next_node_key: "pkg_300",
+            title: "প্যাকেজ সমূহ (২০০ - ১০০০+ জন)",
+            rows: [
+              {
+                reply_id: "students_200",
+                title: "২০০ জন শিক্ষার্থী",
+                description: "২০০ জন শিক্ষার্থীর জন্য স্ট্যান্ডার্ড প্যাকেজ",
+                next_node_key: "pkg_200",
+              },
+              {
+                reply_id: "students_300",
+                title: "৩০০ জন শিক্ষার্থী",
+                description: "৩০০ জন শিক্ষার্থীর জন্য গ্রোথ প্যাকেজ",
+                next_node_key: "pkg_300",
+              },
+              {
+                reply_id: "students_400",
+                title: "৪০০ জন শিক্ষার্থী",
+                description: "৪০০ জন শিক্ষার্থীর জন্য প্রফেশনাল প্যাকেজ",
+                next_node_key: "pkg_400",
+              },
+              {
+                reply_id: "students_500",
+                title: "৫০০ জন শিক্ষার্থী",
+                description: "৫০০ জন শিক্ষার্থীর জন্য বিজনেস প্যাকেজ",
+                next_node_key: "pkg_500",
+              },
+              {
+                reply_id: "students_600",
+                title: "৬০০ জন শিক্ষার্থী",
+                description: "৬০০ জন শিক্ষার্থীর জন্য প্লাস প্যাকেজ",
+                next_node_key: "pkg_600",
+              },
+              {
+                reply_id: "students_700",
+                title: "৭০০ জন শিক্ষার্থী",
+                description: "৭০০ জন শিক্ষার্থীর জন্য প্রিমিয়াম প্যাকেজ",
+                next_node_key: "pkg_700",
+              },
+              {
+                reply_id: "students_800",
+                title: "৮০০ জন শিক্ষার্থী",
+                description: "৮০০ জন শিক্ষার্থীর জন্য আলটিমেট প্যাকেজ",
+                next_node_key: "pkg_800",
+              },
+              {
+                reply_id: "students_900",
+                title: "৯০০ জন শিক্ষার্থী",
+                description: "৯০০ জন শিক্ষার্থীর জন্য সুপ্রিম প্যাকেজ",
+                next_node_key: "pkg_900",
+              },
+              {
+                reply_id: "students_1000",
+                title: "১০০০+ জন শিক্ষার্থী",
+                description: "১০০০+ জন শিক্ষার্থীদের জন্য এন্টারপ্রাইজ প্যাকেজ",
+                next_node_key: "pkg_1000",
+              },
+            ],
           },
         ],
-      } as SendButtonsNodeConfig,
-    },
-    {
-      node_key: "pkg_100",
-      node_type: "send_message",
-      config: {
-        text: "🎯 ১০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ১,৫০০ টাকা/মাস\n• সকল বেসিক ফিচার অন্তর্ভুক্ত\n• ২৪/৭ সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
-        next_node_key: "end",
-      } as SendMessageNodeConfig,
+      } as SendListNodeConfig,
     },
     {
       node_key: "pkg_200",
       node_type: "send_message",
       config: {
-        text: "🎯 ২০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ২,৫০০ টাকা/মাস\n• প্রিমিয়াম ফিচার + হোয়াটসঅ্যাপ অটোমেশন\n• ডেডিকেটেড সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
+        text: "🎯 ২০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ২,০০০ টাকা/মাস\n• প্রিমিয়াম ফিচার + হোয়াটসঅ্যাপ অটোমেশন\n• ডেডিকেটেড সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
         next_node_key: "end",
       } as SendMessageNodeConfig,
     },
@@ -404,7 +455,63 @@ const BENGALI_COURSE_MENU: FlowTemplate = {
       node_key: "pkg_300",
       node_type: "send_message",
       config: {
-        text: "🎯 ৩০০+ জন শিক্ষার্থীর জন্য এন্টারপ্রাইজ প্যাকেজ:\n\n• মূল্য: ৩,৫০০ টাকা/মাস\n• আনলিমিটেড স্টুডেন্ট ও অটোমেশন\n• ভিআইপি সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
+        text: "🎯 ৩০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ২,৫০০ টাকা/মাস\n• প্রিমিয়াম ফিচার + হোয়াটসঅ্যাপ অটোমেশন\n• ডেডিকেটেড সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
+        next_node_key: "end",
+      } as SendMessageNodeConfig,
+    },
+    {
+      node_key: "pkg_400",
+      node_type: "send_message",
+      config: {
+        text: "🎯 ৪০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ৩,০০০ টাকা/মাস\n• আনলিমিটেড হোয়াটসঅ্যাপ মেসেজিং\n• ২৪/৭ সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
+        next_node_key: "end",
+      } as SendMessageNodeConfig,
+    },
+    {
+      node_key: "pkg_500",
+      node_type: "send_message",
+      config: {
+        text: "🎯 ৫০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ৩,৫০০ টাকা/মাস\n• অল-ইন-ওয়ান সিআরএম ও অটোমেশন\n• ডেডিকেটেড একাউন্ট ম্যানেজার\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
+        next_node_key: "end",
+      } as SendMessageNodeConfig,
+    },
+    {
+      node_key: "pkg_600",
+      node_type: "send_message",
+      config: {
+        text: "🎯 ৬০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ৪,০০০ টাকা/মাস\n• অল-ইন-ওয়ান সিআরএম ও অটোমেশন\n• ভিআইপি সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
+        next_node_key: "end",
+      } as SendMessageNodeConfig,
+    },
+    {
+      node_key: "pkg_700",
+      node_type: "send_message",
+      config: {
+        text: "🎯 ৭০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ৪,৫০০ টাকা/মাস\n• এডভান্সড এআই বটের সুবিধা\n• ভিআইপি সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
+        next_node_key: "end",
+      } as SendMessageNodeConfig,
+    },
+    {
+      node_key: "pkg_800",
+      node_type: "send_message",
+      config: {
+        text: "🎯 ৮০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ৫,০০০ টাকা/মাস\n• এডভান্সড এআই বট + কাস্টম অটোমেশন\n• ভিআইপি সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
+        next_node_key: "end",
+      } as SendMessageNodeConfig,
+    },
+    {
+      node_key: "pkg_900",
+      node_type: "send_message",
+      config: {
+        text: "🎯 ৯০০ জন শিক্ষার্থীর জন্য প্যাকেজ:\n\n• মূল্য: ৫,৫০০ টাকা/মাস\n• এডভান্সড এআই বট + কাস্টম অটোমেশন\n• ভিআইপি সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
+        next_node_key: "end",
+      } as SendMessageNodeConfig,
+    },
+    {
+      node_key: "pkg_1000",
+      node_type: "send_message",
+      config: {
+        text: "🎯 ১০০০+ জন শিক্ষার্থীর জন্য এন্টারপ্রাইজ প্যাকেজ:\n\n• মূল্য: ৬,০০০ টাকা/মাস\n• আনলিমিটেড স্টুডেন্ট, এআই ও কাস্টম ইন্টিগ্রেশন\n• ডেডিকেটেড একাউন্ট ম্যানেজার ও ভিআইপি সাপোর্ট\n\nঅর্ডার করতে বা ভর্তি হতে আমাদের মেসেজ দিন!",
         next_node_key: "end",
       } as SendMessageNodeConfig,
     },
