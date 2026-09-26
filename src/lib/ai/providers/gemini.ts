@@ -56,10 +56,18 @@ export async function generateGemini(args: ProviderArgs): Promise<ProviderResult
     generationConfig.thinkingConfig = { thinkingBudget: 0 }
   }
 
-  let res: Response
-  const executeCall = async () => {
+  const fallbackModels = Array.from(
+    new Set([model, 'gemini-flash-latest', 'gemini-3.8-flash', 'gemini-2.5-flash']),
+  )
+
+  let res: Response | null = null
+  const executeCall = async (targetModel: string, includeThinking = true) => {
+    const configToUse = { ...generationConfig }
+    if (!includeThinking || !/flash/i.test(targetModel)) {
+      delete configToUse.thinkingConfig
+    }
     return fetch(
-      `${GEMINI_BASE_URL}/${encodeURIComponent(model)}:generateContent`,
+      `${GEMINI_BASE_URL}/${encodeURIComponent(targetModel)}:generateContent`,
       {
         method: 'POST',
         headers: {
@@ -72,7 +80,7 @@ export async function generateGemini(args: ProviderArgs): Promise<ProviderResult
             role: m.role === 'assistant' ? 'model' : 'user',
             parts: [{ text: m.content }],
           })),
-          generationConfig,
+          generationConfig: configToUse,
         }),
         signal: AbortSignal.timeout(timeoutMs),
       },
@@ -80,14 +88,51 @@ export async function generateGemini(args: ProviderArgs): Promise<ProviderResult
   }
 
   try {
-    res = await executeCall()
-    // 503 Overloaded / High Demand: retry once after 1s before giving up
-    if (res.status === 503) {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      res = await executeCall()
+    for (let i = 0; i < fallbackModels.length; i++) {
+      const currentModel = fallbackModels[i]
+      let candidate = await executeCall(currentModel, true)
+
+      // If 400 because thinkingConfig is unrecognized on this model, retry without it
+      if (candidate.status === 400 && generationConfig.thinkingConfig) {
+        const cloned = await candidate.clone().text().catch(() => '')
+        if (/thinkingConfig|thinking_config|unknown field/i.test(cloned)) {
+          candidate = await executeCall(currentModel, false)
+        }
+      }
+
+      // If 503 overloaded, wait 800ms and try once more on same model
+      if (candidate.status === 503) {
+        await new Promise((resolve) => setTimeout(resolve, 800))
+        candidate = await executeCall(currentModel, false)
+      }
+
+      res = candidate
+
+      // If successful, we are done
+      if (res.ok) {
+        break
+      }
+
+      // If 429 (rate/quota), 503 (overloaded), or 404 (not found) and we have more fallback models, try next model
+      const isTemporaryOrModelIssue =
+        res.status === 429 || res.status === 503 || res.status === 404
+      if (isTemporaryOrModelIssue && i < fallbackModels.length - 1) {
+        console.warn(
+          `[gemini] Model ${currentModel} returned ${res.status}. Trying next model ${fallbackModels[i + 1]}...`,
+        )
+        continue
+      }
+      break
     }
   } catch (err) {
     throw toNetworkError(err)
+  }
+
+  if (!res) {
+    throw new AiError('No response received from Gemini API.', {
+      code: 'network_error',
+      status: 502,
+    })
   }
 
   if (!res.ok) {

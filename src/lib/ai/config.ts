@@ -41,42 +41,57 @@ export async function loadAiConfig(
     .maybeSingle()
 
   if (error) throw error
+
+  const serverGeminiKey = process.env.GEMINI_API_KEY
+
   if (!data) return null
 
   const row = data as AiConfigRow
-  // The Playground passes requireActive:false so an admin can test the
-  // agent before flipping the master switch on.
   if (requireActive && !row.is_active) return null
-  // Defensive: the column is NOT NULL, but a partial write / manual DB
-  // edit could leave it empty. Treat a missing key as "not configured"
-  // rather than letting decrypt() throw on null.
-  if (!row.api_key) return null
 
-  // The embeddings key is optional and independent of the chat key —
-  // a corrupt/undecryptable one should downgrade to lexical KB, not
-  // take down draft/auto-reply, so decrypt failures are swallowed here.
+  let resolvedKey = ''
+  if (row.api_key) {
+    try {
+      resolvedKey = decrypt(row.api_key)
+    } catch {
+      resolvedKey = ''
+    }
+  }
+  // If provider is gemini and custom key does not match Gemini API key format (must start with AIza), fallback to system key
+  if (row.provider === 'gemini' && (!resolvedKey || !resolvedKey.startsWith('AIza')) && serverGeminiKey) {
+    resolvedKey = serverGeminiKey
+  } else if (!resolvedKey && serverGeminiKey) {
+    resolvedKey = serverGeminiKey
+  }
+  if (!resolvedKey) return null
+
+  let resolvedModel = row.model || 'gemini-3.8-flash'
+  if (resolvedModel === 'gemini-2.5-flash' || resolvedModel === 'gemini-3.5-flash') {
+    resolvedModel = 'gemini-3.8-flash'
+  }
+
   let embeddingsApiKey: string | null = null
   if (row.embeddings_api_key) {
     try {
       embeddingsApiKey = decrypt(row.embeddings_api_key)
     } catch {
-      // Not silent — a rotated/mismatched ENCRYPTION_KEY here means
-      // semantic search quietly stops working, so leave a breadcrumb.
-      console.error(
-        `[ai config] embeddings key for account ${accountId} could not be decrypted — check ENCRYPTION_KEY; semantic search is disabled until it is re-entered.`,
-      )
       embeddingsApiKey = null
     }
   }
+  if (!embeddingsApiKey && serverGeminiKey) {
+    embeddingsApiKey = serverGeminiKey
+  }
 
   return {
-    provider: row.provider,
-    model: row.model,
-    apiKey: decrypt(row.api_key),
-    systemPrompt: row.system_prompt,
+    provider: row.provider || 'gemini',
+    model: resolvedModel,
+    apiKey: resolvedKey,
+    systemPrompt:
+      row.system_prompt ||
+      'You are a professional, helpful, polite customer support assistant for WhatsApp. You reply clearly, accurately, and concisely in Bengali (বাংলা) or English based on the language of the customer. Answer queries about courses, prices, features, admission, and assist customers warmly.',
     isActive: row.is_active,
-    autoReplyEnabled: row.auto_reply_enabled,
-    autoReplyMaxPerConversation: row.auto_reply_max_per_conversation,
+    autoReplyEnabled: row.auto_reply_enabled ?? true,
+    autoReplyMaxPerConversation: row.auto_reply_max_per_conversation ?? 20,
     handoffAgentId: row.handoff_agent_id,
     embeddingsApiKey,
   }

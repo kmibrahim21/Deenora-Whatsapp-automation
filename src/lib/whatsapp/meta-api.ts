@@ -940,17 +940,11 @@ export async function sendInteractiveButtons(
     phoneNumberId, accessToken, to,
     bodyText, headerText, footerText, buttons, contextMessageId,
   } = args
-  const safeBody = (bodyText && bodyText.trim()) ? bodyText : 'নিচের অপশনটি নির্বাচন করুন:'
-  validateInteractiveBody(safeBody)
-  const safeHeader =
-    headerText && headerText.length > INTERACTIVE_LIMITS.headerTextMaxLength
-      ? headerText.slice(0, INTERACTIVE_LIMITS.headerTextMaxLength)
-      : headerText
-  const safeFooter =
-    footerText && footerText.length > INTERACTIVE_LIMITS.footerMaxLength
-      ? footerText.slice(0, INTERACTIVE_LIMITS.footerMaxLength)
-      : footerText
-  validateInteractiveHeaderFooter(safeHeader, safeFooter)
+  if (!bodyText || !bodyText.trim()) {
+    throw new Error('Interactive message requires bodyText.')
+  }
+  validateInteractiveBody(bodyText)
+  validateInteractiveHeaderFooter(headerText, footerText)
 
   if (buttons.length < 1 || buttons.length > INTERACTIVE_LIMITS.maxButtons) {
     throw new Error(
@@ -964,17 +958,18 @@ export async function sendInteractiveButtons(
       throw new Error(`Interactive message has duplicate button id "${btn.id}".`)
     }
     seenButtonIds.add(btn.id)
-    const rawTitle = btn.title || 'বাটন'
-    const title =
-      rawTitle.length > INTERACTIVE_LIMITS.buttonTitleMaxLength
-        ? rawTitle.slice(0, INTERACTIVE_LIMITS.buttonTitleMaxLength)
-        : rawTitle
-    return { id: btn.id, title }
+    const rawTitle = btn.title || ''
+    if (rawTitle.length > INTERACTIVE_LIMITS.buttonTitleMaxLength) {
+      throw new Error(
+        `Interactive button title "${rawTitle}" exceeds ${INTERACTIVE_LIMITS.buttonTitleMaxLength} chars (Meta cap).`
+      )
+    }
+    return { id: btn.id, title: rawTitle || 'বাটন' }
   })
 
   const interactive: Record<string, unknown> = {
     type: 'button',
-    body: { text: safeBody },
+    body: { text: bodyText },
     action: {
       buttons: safeButtons.map((b) => ({
         type: 'reply',
@@ -982,8 +977,8 @@ export async function sendInteractiveButtons(
       })),
     },
   }
-  if (safeHeader) interactive.header = { type: 'text', text: safeHeader }
-  if (safeFooter) interactive.footer = { text: safeFooter }
+  if (headerText) interactive.header = { type: 'text', text: headerText }
+  if (footerText) interactive.footer = { text: footerText }
 
   const body: Record<string, unknown> = {
     messaging_product: 'whatsapp',
@@ -1054,44 +1049,35 @@ export async function sendInteractiveList(
     phoneNumberId, accessToken, to,
     bodyText, buttonLabel, headerText, footerText, sections, contextMessageId,
   } = args
-  const safeBody = (bodyText && bodyText.trim()) ? bodyText : 'নিচের তালিকা থেকে নির্বাচন করুন:'
-  validateInteractiveBody(safeBody)
-  const safeHeader =
-    headerText && headerText.length > INTERACTIVE_LIMITS.headerTextMaxLength
-      ? headerText.slice(0, INTERACTIVE_LIMITS.headerTextMaxLength)
-      : headerText
-  const safeFooter =
-    footerText && footerText.length > INTERACTIVE_LIMITS.footerMaxLength
-      ? footerText.slice(0, INTERACTIVE_LIMITS.footerMaxLength)
-      : footerText
-  validateInteractiveHeaderFooter(safeHeader, safeFooter)
 
-  const rawButtonLabel = (buttonLabel && buttonLabel.trim()) ? buttonLabel.trim() : 'প্যাকেজ দেখুন'
-  const safeButtonLabel =
-    rawButtonLabel.length > INTERACTIVE_LIMITS.buttonTitleMaxLength
-      ? rawButtonLabel.slice(0, INTERACTIVE_LIMITS.buttonTitleMaxLength)
-      : rawButtonLabel
+  if (!bodyText || !bodyText.trim()) {
+    throw new Error('Interactive message requires bodyText.')
+  }
+  validateInteractiveBody(bodyText)
+  validateInteractiveHeaderFooter(headerText, footerText)
 
-  const safeSectionsInput = sections && sections.length > 0 ? sections : [
-    {
-      title: 'প্যাকেজ সমূহ',
-      rows: [{ id: 'row_1', title: 'প্যাকেজ ১' }]
-    }
-  ]
-
-  if (safeSectionsInput.length < 1 || safeSectionsInput.length > INTERACTIVE_LIMITS.maxListSections) {
+  if (!buttonLabel || !buttonLabel.trim()) {
+    throw new Error('Interactive list message requires a buttonLabel.')
+  }
+  if (buttonLabel.length > INTERACTIVE_LIMITS.buttonTitleMaxLength) {
     throw new Error(
-      `Interactive list requires 1-${INTERACTIVE_LIMITS.maxListSections} sections (got ${safeSectionsInput.length}).`
+      `Interactive list buttonLabel "${buttonLabel}" exceeds ${INTERACTIVE_LIMITS.buttonTitleMaxLength} chars (Meta cap).`
     )
   }
-  const totalRows = safeSectionsInput.reduce((sum, s) => sum + (s.rows?.length ?? 0), 0)
+
+  if (!sections || sections.length < 1 || sections.length > INTERACTIVE_LIMITS.maxListSections) {
+    throw new Error(
+      `Interactive list requires 1-${INTERACTIVE_LIMITS.maxListSections} sections (got ${sections?.length ?? 0}).`
+    )
+  }
+  const totalRows = sections.reduce((sum, s) => sum + (s.rows?.length ?? 0), 0)
   if (totalRows < 1 || totalRows > INTERACTIVE_LIMITS.maxListRowsTotal) {
     throw new Error(
       `Interactive list requires 1-${INTERACTIVE_LIMITS.maxListRowsTotal} rows total across all sections (got ${totalRows}).`
     )
   }
   const seenIds = new Set<string>()
-  const safeSections = safeSectionsInput.map((section, sIdx) => {
+  const safeSections = sections.map((section, sIdx) => {
     const rawSecTitle = (section.title ?? '').trim()
     const secTitle =
       rawSecTitle.length > INTERACTIVE_LIMITS.listRowTitleMaxLength
@@ -1105,26 +1091,27 @@ export async function sendInteractiveList(
           throw new Error(`Interactive list has duplicate row id "${rowId}".`)
         }
         seenIds.add(rowId)
-        const rawTitle = (row.title ?? '').trim() || 'প্যাকেজ'
-        const title =
-          rawTitle.length > INTERACTIVE_LIMITS.listRowTitleMaxLength
-            ? rawTitle.slice(0, INTERACTIVE_LIMITS.listRowTitleMaxLength)
-            : rawTitle
+        const rawTitle = (row.title ?? '').trim()
+        if (rawTitle.length > INTERACTIVE_LIMITS.listRowTitleMaxLength) {
+          throw new Error(
+            `Interactive list row title "${rawTitle}" exceeds ${INTERACTIVE_LIMITS.listRowTitleMaxLength} chars (Meta cap).`
+          )
+        }
         const rawDesc = (row.description ?? '').trim()
         const description =
           rawDesc && rawDesc.length > INTERACTIVE_LIMITS.listRowDescriptionMaxLength
             ? rawDesc.slice(0, INTERACTIVE_LIMITS.listRowDescriptionMaxLength)
             : rawDesc || undefined
-        return { id: rowId, title, description }
+        return { id: rowId, title: rawTitle || 'প্যাকেজ', description }
       }),
     }
   })
 
   const interactive: Record<string, unknown> = {
     type: 'list',
-    body: { text: safeBody },
+    body: { text: bodyText },
     action: {
-      button: safeButtonLabel,
+      button: buttonLabel,
       sections: safeSections.map((s) => ({
         ...(s.title ? { title: s.title } : {}),
         rows: s.rows.map((r) => ({
@@ -1135,8 +1122,8 @@ export async function sendInteractiveList(
       })),
     },
   }
-  if (safeHeader) interactive.header = { type: 'text', text: safeHeader }
-  if (safeFooter) interactive.footer = { text: safeFooter }
+  if (headerText) interactive.header = { type: 'text', text: headerText }
+  if (footerText) interactive.footer = { text: footerText }
 
   const body: Record<string, unknown> = {
     messaging_product: 'whatsapp',
