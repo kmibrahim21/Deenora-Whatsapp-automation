@@ -18,7 +18,8 @@ import { NextResponse } from "next/server";
 import type { PostgrestError } from "@supabase/supabase-js";
 
 import { requireRole, toErrorResponse } from "@/lib/auth/account";
-import { isAccountRole } from "@/lib/auth/roles";
+import { isAccountRole, parseAgentPermissions } from "@/lib/auth/roles";
+import { supabaseAdmin } from "@/lib/ai/admin-client";
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -58,35 +59,76 @@ export async function PATCH(
     const { userId } = await params;
 
     const body = (await request.json().catch(() => null)) as
-      | { role?: unknown }
+      | { role?: unknown; agentPermissions?: unknown }
       | null;
     const role = body?.role;
+    const rawAgentPerms = body?.agentPermissions;
 
-    if (!isAccountRole(role)) {
-      return NextResponse.json(
-        { error: "'role' must be one of owner, admin, agent, viewer" },
-        { status: 400 },
-      );
+    if (role !== undefined) {
+      if (!isAccountRole(role)) {
+        return NextResponse.json(
+          { error: "'role' must be one of owner, admin, agent, viewer" },
+          { status: 400 },
+        );
+      }
+
+      if (role === "owner") {
+        return NextResponse.json(
+          {
+            error:
+              "Use POST /api/account/transfer-ownership to promote a member to owner",
+          },
+          { status: 400 },
+        );
+      }
+
+      const { error } = await ctx.supabase.rpc("set_member_role", {
+        p_user_id: userId,
+        p_new_role: role,
+      });
+
+      if (error) return rpcErrorToResponse(error);
     }
 
-    // The RPC blocks promotion to / demotion from owner, but
-    // surface the friendlier 400 before crossing the wire too.
-    if (role === "owner") {
-      return NextResponse.json(
-        {
-          error:
-            "Use POST /api/account/transfer-ownership to promote a member to owner",
-        },
-        { status: 400 },
+    // Handle agent_permissions update if provided
+    if (Array.isArray(rawAgentPerms)) {
+      const dbAdmin = supabaseAdmin();
+      const perms = parseAgentPermissions(rawAgentPerms as string[]);
+
+      // First fetch target profile to get existing beta_features
+      const { data: targetProfile } = await dbAdmin
+        .from("profiles")
+        .select("beta_features")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const existingBeta = (targetProfile?.beta_features ?? []).filter(
+        (f) => !f.startsWith("perm:")
       );
+      const permBetaFlags = perms.map((p) => `perm:${p}`);
+      const newBeta = Array.from(new Set([...existingBeta, ...permBetaFlags]));
+
+      // Update both agent_permissions and beta_features
+      const updatePayload: Record<string, unknown> = {
+        agent_permissions: perms,
+        beta_features: newBeta,
+      };
+
+      const { error: updateErr } = await dbAdmin
+        .from("profiles")
+        .update(updatePayload)
+        .eq("user_id", userId);
+
+      // If updating agent_permissions failed (e.g. column not in schema cache), retry with beta_features only
+      if (updateErr && updateErr.code === "42703") {
+        await dbAdmin
+          .from("profiles")
+          .update({ beta_features: newBeta })
+          .eq("user_id", userId);
+      } else if (updateErr) {
+        console.error("[PATCH /api/account/members/[userId]] perms update error:", updateErr);
+      }
     }
-
-    const { error } = await ctx.supabase.rpc("set_member_role", {
-      p_user_id: userId,
-      p_new_role: role,
-    });
-
-    if (error) return rpcErrorToResponse(error);
 
     return NextResponse.json({ ok: true });
   } catch (err) {

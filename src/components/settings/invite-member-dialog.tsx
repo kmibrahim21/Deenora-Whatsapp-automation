@@ -38,6 +38,8 @@ import {
 } from '@/components/ui/select';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/hooks/use-auth';
+import { AgentPermissionsSelector } from './agent-permissions-selector';
+import { type AgentPermission, DEFAULT_AGENT_PERMISSIONS } from '@/lib/auth/roles';
 
 type InviteRole = 'admin' | 'agent' | 'viewer';
 
@@ -80,6 +82,7 @@ export function InviteMemberDialog({
   const [role, setRole] = useState<InviteRole>('agent');
   const [expiry, setExpiry] = useState<string>('7');
   const [label, setLabel] = useState('');
+  const [agentPermissions, setAgentPermissions] = useState<AgentPermission[]>(DEFAULT_AGENT_PERMISSIONS);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<CreatedInvite | null>(null);
 
@@ -87,17 +90,12 @@ export function InviteMemberDialog({
     setRole('agent');
     setExpiry('7');
     setLabel('');
+    setAgentPermissions(DEFAULT_AGENT_PERMISSIONS);
     setResult(null);
     setSubmitting(false);
   }
 
   async function handleCreate() {
-    // Mirror the server's max-length check so we don't ship an
-    // obviously-too-long label across the wire just to bounce off
-    // a 400. The Input also has a `maxLength={MAX_LABEL_LEN}` cap
-    // but a paste can land an over-limit string into state before
-    // the limit kicks in on the next keystroke — this is the safety
-    // net for that path.
     const trimmedLabel = label.trim();
     if (trimmedLabel.length > MAX_LABEL_LEN) {
       toast.error(t('labelTooLong', { max: MAX_LABEL_LEN }));
@@ -112,6 +110,7 @@ export function InviteMemberDialog({
           role,
           expiresInDays: Number(expiry),
           label: trimmedLabel || undefined,
+          agentPermissions: role === 'agent' ? agentPermissions : undefined,
         }),
       });
 
@@ -286,6 +285,14 @@ export function InviteMemberDialog({
                   {tRoles(`${role}Hint` as 'adminHint' | 'agentHint' | 'viewerHint')}
                 </p>
               </div>
+
+              {role === 'agent' && (
+                <AgentPermissionsSelector
+                  selectedPermissions={agentPermissions}
+                  onChange={setAgentPermissions}
+                  disabled={submitting}
+                />
+              )}
 
               <div className="space-y-2">
                 <Label className="text-muted-foreground">{t('validForLabel')}</Label>

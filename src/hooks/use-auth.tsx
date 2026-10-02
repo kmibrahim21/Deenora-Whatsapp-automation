@@ -17,8 +17,11 @@ import {
   canEditSettings as canEditSettingsFor,
   canManageMembers as canManageMembersFor,
   canSendMessages as canSendMessagesFor,
+  hasPermission as checkHasPermission,
+  parseAgentPermissions,
   isAccountRole,
   type AccountRole,
+  type AgentPermission,
 } from "@/lib/auth/roles";
 
 interface Profile {
@@ -28,13 +31,12 @@ interface Profile {
   avatar_url: string | null;
   role: string | null;
   /**
-   * Opted-in beta feature keys for this account. No current feature
-   * reads this — Flows was the last user and went to soft-GA in PR
-   * #134 — but the column survives for future beta gates.
+   * Opted-in beta feature keys for this account.
    */
   beta_features: string[];
   account_id: string | null;
   account_role: AccountRole | null;
+  agent_permissions: string[] | null;
 }
 
 interface AccountSummary {
@@ -130,6 +132,10 @@ interface AuthContextValue {
   canEditSettings: boolean;
   /** True if the caller can send messages and edit operational data (agent+). */
   canSendMessages: boolean;
+  /** Granular permissions granted if the user is an agent. */
+  agentPermissions: AgentPermission[];
+  /** Check if the current user has permission for a specific section or feature. */
+  hasPermission: (permissionKey: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -152,6 +158,7 @@ interface ProfileRow {
   beta_features: string[] | null;
   account_id: string | null;
   account_role: string | null;
+  agent_permissions?: string[] | null;
 }
 
 /**
@@ -192,14 +199,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const result = await supabase
           .from("profiles")
           .select(
-            "id, full_name, email, avatar_url, role, beta_features, account_id, account_role",
+            "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, agent_permissions",
           )
           .eq("user_id", userId)
           .maybeSingle();
 
         if (!result.error) {
-          data = result.data;
+          data = result.data as unknown as ProfileRow;
           break;
+        }
+
+        // If selecting agent_permissions failed because column doesn't exist yet, retry without it
+        if (result.error.code === '42703') {
+          const fallbackRes = await supabase
+            .from("profiles")
+            .select(
+              "id, full_name, email, avatar_url, role, beta_features, account_id, account_role",
+            )
+            .eq("user_id", userId)
+            .maybeSingle();
+
+          if (!fallbackRes.error && fallbackRes.data) {
+            data = fallbackRes.data as ProfileRow;
+            break;
+          }
         }
 
         const error = result.error;
@@ -267,19 +290,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ? data.account_role
           : null;
 
+        const parsedPerms = parseAgentPermissions(
+          data.agent_permissions,
+          data.beta_features
+        );
+
         setProfile({
           id: data.id,
           full_name: data.full_name,
           email: data.email,
           avatar_url: data.avatar_url,
           role: data.role,
-          // `beta_features` is `NOT NULL DEFAULT ARRAY[]` in the DB, but
-          // narrow defensively in case the column hasn't been migrated yet
-          // (older deployments running 011 lazily) — `null` reads as no
-          // opt-ins, which is the safe default for any future beta gate.
           beta_features: data.beta_features ?? [],
           account_id: data.account_id ?? null,
           account_role: accountRole,
+          agent_permissions: parsedPerms,
         });
         setAccount(accountRow);
         if (!data.account_id || !accountRole) {
@@ -400,9 +425,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // dependencies downstream.
   const derived = useMemo(() => {
     const role = profile?.account_role ?? null;
+    const agentPerms = parseAgentPermissions(
+      profile?.agent_permissions,
+      profile?.beta_features
+    );
+    const hasPermissionCallback = (permissionKey: string) => {
+      return checkHasPermission(role, permissionKey, agentPerms);
+    };
+
     return {
       accountRole: role,
       accountId: profile?.account_id ?? null,
+      agentPermissions: agentPerms,
+      hasPermission: hasPermissionCallback,
       isOwner: role === "owner",
       isAdmin: role === "admin",
       isAgent: role === "agent",
@@ -411,7 +446,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       canEditSettings: role ? canEditSettingsFor(role) : false,
       canSendMessages: role ? canSendMessagesFor(role) : false,
     };
-  }, [profile?.account_role, profile?.account_id]);
+  }, [
+    profile?.account_role,
+    profile?.account_id,
+    profile?.agent_permissions,
+    profile?.beta_features,
+  ]);
 
   // Signed out is not a broken account — the shell redirects to /login
   // before anything reads this.

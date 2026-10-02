@@ -29,9 +29,17 @@ import {
   Mail,
   MailX,
   Plus,
+  Shield,
   Trash2,
   UsersRound,
 } from 'lucide-react';
+import { AgentPermissionsSelector } from './agent-permissions-selector';
+import {
+  AGENT_PERMISSION_OPTIONS,
+  parseAgentPermissions,
+  type AgentPermission,
+  DEFAULT_AGENT_PERMISSIONS,
+} from '@/lib/auth/roles';
 
 import {
   Avatar,
@@ -82,12 +90,14 @@ interface Member {
   email: string | null;
   avatar_url: string | null;
   role: AccountRole;
+  agent_permissions?: string[] | null;
   joined_at: string;
 }
 
 interface Invitation {
   id: string;
   role: 'admin' | 'agent' | 'viewer';
+  agent_permissions?: string[] | null;
   label: string | null;
   created_at: string;
   expires_at: string;
@@ -136,6 +146,9 @@ export function MembersTab() {
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [removingMember, setRemovingMember] = useState<Member | null>(null);
+  const [editingPermsMember, setEditingPermsMember] = useState<Member | null>(null);
+  const [editingPerms, setEditingPerms] = useState<AgentPermission[]>([]);
+  const [savingPerms, setSavingPerms] = useState(false);
   const [pendingMemberAction, setPendingMemberAction] = useState<string | null>(
     null,
   );
@@ -180,6 +193,40 @@ export function MembersTab() {
     void loadEverything();
   }, [loadEverything]);
 
+  async function handleSavePermissions() {
+    if (!editingPermsMember) return;
+    setSavingPerms(true);
+    try {
+      const res = await fetch(
+        `/api/account/members/${editingPermsMember.user_id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentPermissions: editingPerms }),
+        },
+      );
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        toast.error(payload.error || t('updateRoleFailed'));
+        return;
+      }
+      toast.success('পারমিশন সফলভাবে আপডেট করা হয়েছে');
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.user_id === editingPermsMember.user_id
+            ? { ...m, agent_permissions: editingPerms }
+            : m,
+        ),
+      );
+      setEditingPermsMember(null);
+    } catch (err) {
+      console.error('[MembersTab] save perms error:', err);
+      toast.error(t('networkError'));
+    } finally {
+      setSavingPerms(false);
+    }
+  }
+
   async function handleRoleChange(member: Member, nextRole: AccountRole) {
     if (member.role === nextRole) return;
     // Optimistic update — flip the dropdown immediately so the UI
@@ -199,11 +246,6 @@ export function MembersTab() {
         body: JSON.stringify({ role: nextRole }),
       });
       if (!res.ok) {
-        // Revert the optimistic flip. The toast on its own wasn't
-        // enough — the dropdown was left showing the new role
-        // forever, so the next interaction operated on a wrong
-        // baseline (re-trying the same change would no-op via the
-        // `member.role === nextRole` guard at the top).
         setMembers((prev) =>
           prev.map((m) =>
             m.user_id === member.user_id ? { ...m, role: previousRole } : m,
@@ -214,8 +256,14 @@ export function MembersTab() {
         return;
       }
       toast.success(t('updatedToast', { name: member.full_name || t('unnamed'), role: tRoles(nextRole) }));
+      
+      // If promoted to agent, automatically open permissions modal so admin can select what they can see
+      if (nextRole === 'agent') {
+        const perms = parseAgentPermissions(member.agent_permissions);
+        setEditingPermsMember({ ...member, role: 'agent' });
+        setEditingPerms(perms);
+      }
     } catch (err) {
-      // Same revert on network failure.
       setMembers((prev) =>
         prev.map((m) =>
           m.user_id === member.user_id ? { ...m, role: previousRole } : m,
@@ -396,6 +444,23 @@ export function MembersTab() {
                           {member.email}
                         </p>
                       )}
+                      {member.role === 'agent' && (
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                          <span className="text-[10px] text-muted-foreground mr-0.5">পারমিশন:</span>
+                          {parseAgentPermissions(member.agent_permissions).map((pKey) => {
+                            const opt = AGENT_PERMISSION_OPTIONS.find((o) => o.key === pKey);
+                            return (
+                              <Badge
+                                key={pKey}
+                                variant="outline"
+                                className="text-[10px] py-0 px-1.5 h-4 font-normal bg-primary/5 border-primary/20 text-primary"
+                              >
+                                {opt ? opt.defaultLabel.split(' ')[0] : pKey}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -414,30 +479,47 @@ export function MembersTab() {
                         only AND not allowed on the owner row (owner
                         changes go through transfer, which lands later). */}
                     {canManageMembers && !isOwnerRow && !isSelf ? (
-                      <Select
-                        value={member.role}
-                        onValueChange={(v) =>
-                          // Base UI Select can emit null on clear. We
-                          // don't expose a clear affordance, so the
-                          // guard is defensive — but the typed
-                          // signature requires it.
-                          v && handleRoleChange(member, v as AccountRole)
-                        }
-                      >
-                        <SelectTrigger
-                          className="w-32 bg-muted border-border text-foreground"
-                          disabled={isBusy}
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={member.role}
+                          onValueChange={(v) =>
+                            // Base UI Select can emit null on clear. We
+                            // don't expose a clear affordance, so the
+                            // guard is defensive — but the typed
+                            // signature requires it.
+                            v && handleRoleChange(member, v as AccountRole)
+                          }
                         >
-                          <SelectValue>{tRoles(member.role)}</SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {EDITABLE_ROLES.map((r) => (
-                            <SelectItem key={r.value} value={r.value}>
-                              {tRoles(r.value)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                          <SelectTrigger
+                            className="w-32 bg-muted border-border text-foreground"
+                            disabled={isBusy}
+                          >
+                            <SelectValue>{tRoles(member.role)}</SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {EDITABLE_ROLES.map((r) => (
+                              <SelectItem key={r.value} value={r.value}>
+                                {tRoles(r.value)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        {member.role === 'agent' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditingPermsMember(member);
+                              setEditingPerms(parseAgentPermissions(member.agent_permissions));
+                            }}
+                            className="border-primary/40 text-primary hover:bg-primary/10 text-xs h-9 px-2.5"
+                          >
+                            <Shield className="size-3.5 mr-1" />
+                            পারমিশন
+                          </Button>
+                        )}
+                      </div>
                     ) : (
                       <span
                         className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium ${roleMeta.className}`}
@@ -605,6 +687,58 @@ export function MembersTab() {
                 </>
               ) : (
                 t('removeBtn')
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Agent Permissions Modal */}
+      <Dialog
+        open={editingPermsMember !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingPermsMember(null);
+        }}
+      >
+        <DialogContent className="bg-popover border-border sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-popover-foreground text-base">
+              <Shield className="size-4 text-primary" />
+              এজেন্ট পারমিশন সেটিং ({editingPermsMember?.full_name || 'এজেন্ট'})
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground text-xs">
+              এই এজেন্ট টিম মেম্বার কোন কোন অপশন বা সেকশন দেখতে পাবে তা সিলেক্ট করুন। ইনবক্স অ্যাক্সেস বাধ্যতামূলক।
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2">
+            <AgentPermissionsSelector
+              selectedPermissions={editingPerms}
+              onChange={setEditingPerms}
+              disabled={savingPerms}
+            />
+          </div>
+
+          <DialogFooter className="bg-popover border-border">
+            <Button
+              variant="outline"
+              onClick={() => setEditingPermsMember(null)}
+              className="border-border text-muted-foreground hover:bg-muted"
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              onClick={handleSavePermissions}
+              disabled={savingPerms}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              {savingPerms ? (
+                <>
+                  <Loader2 className="size-4 animate-spin mr-1.5" />
+                  সেভ হচ্ছে...
+                </>
+              ) : (
+                'পারমিশন সেভ করুন'
               )}
             </Button>
           </DialogFooter>

@@ -57,7 +57,17 @@ function RateCell({
   );
 }
 
+import { RequirePermission } from '@/components/auth/require-permission';
+
 export default function BroadcastsPage() {
+  return (
+    <RequirePermission permission="broadcasts">
+      <BroadcastsPageContent />
+    </RequirePermission>
+  );
+}
+
+function BroadcastsPageContent() {
   const router = useRouter();
   const t = useTranslations('Broadcasts.page');
   const tStatus = useTranslations('Broadcasts.status');

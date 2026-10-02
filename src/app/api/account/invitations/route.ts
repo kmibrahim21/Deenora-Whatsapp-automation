@@ -26,7 +26,8 @@ import {
   inviteExpiresAt,
   inviteUrl,
 } from "@/lib/auth/invitations";
-import { isAccountRole } from "@/lib/auth/roles";
+import { isAccountRole, parseAgentPermissions } from "@/lib/auth/roles";
+import { supabaseAdmin } from "@/lib/ai/admin-client";
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -143,14 +144,30 @@ export async function GET() {
     const { data, error } = await ctx.supabase
       .from("account_invitations")
       .select(
-        "id, role, label, created_by_user_id, created_at, expires_at, accepted_at, accepted_by_user_id",
+        "id, role, label, agent_permissions, created_by_user_id, created_at, expires_at, accepted_at, accepted_by_user_id",
       )
       .eq("account_id", ctx.accountId)
       .is("accepted_at", null)
       .gt("expires_at", new Date().toISOString())
       .order("created_at", { ascending: false });
 
-    if (error) {
+    if (error && error.code === '42703') {
+      const fallback = await ctx.supabase
+        .from("account_invitations")
+        .select(
+          "id, role, label, created_by_user_id, created_at, expires_at, accepted_at, accepted_by_user_id",
+        )
+        .eq("account_id", ctx.accountId)
+        .is("accepted_at", null)
+        .gt("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: false });
+
+      if (fallback.error) {
+        console.error("[GET /api/account/invitations] fallback fetch error:", fallback.error);
+        return NextResponse.json({ error: "Failed to load invitations" }, { status: 500 });
+      }
+      return NextResponse.json({ invitations: fallback.data ?? [] });
+    } else if (error) {
       console.error("[GET /api/account/invitations] fetch error:", error);
       return NextResponse.json(
         { error: "Failed to load invitations" },
@@ -179,7 +196,7 @@ export async function POST(request: Request) {
     if (!limit.success) return rateLimitResponse(limit);
 
     const body = (await request.json().catch(() => null)) as
-      | { role?: unknown; expiresInDays?: unknown; label?: unknown }
+      | { role?: unknown; expiresInDays?: unknown; label?: unknown; agentPermissions?: unknown }
       | null;
 
     const role = body?.role;
@@ -192,6 +209,8 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    const agentPerms = parseAgentPermissions(body?.agentPermissions as string[]);
 
     const expiresInDaysRaw = body?.expiresInDays;
     // `clampExpiryDays` tolerates undefined / NaN / negatives by
@@ -216,25 +235,45 @@ export async function POST(request: Request) {
 
     const { token, hash } = generateInviteToken();
 
-    const { data, error } = await ctx.supabase
+    const insertPayload: Record<string, unknown> = {
+      account_id: ctx.accountId,
+      token_hash: hash,
+      role,
+      created_by_user_id: ctx.userId,
+      label,
+      expires_at: expiresAt.toISOString(),
+      agent_permissions: agentPerms,
+    };
+
+    let data = null;
+    const dbAdmin = supabaseAdmin();
+    const insertRes = await dbAdmin
       .from("account_invitations")
-      .insert({
-        account_id: ctx.accountId,
-        token_hash: hash,
-        role,
-        created_by_user_id: ctx.userId,
-        label,
-        expires_at: expiresAt.toISOString(),
-      })
-      .select("id, role, label, expires_at, created_at")
+      .insert(insertPayload)
+      .select("id, role, label, agent_permissions, expires_at, created_at")
       .single();
 
-    if (error || !data) {
-      console.error("[POST /api/account/invitations] insert error:", error);
+    if (insertRes.error && insertRes.error.code === '42703') {
+      delete insertPayload.agent_permissions;
+      const fallbackRes = await dbAdmin
+        .from("account_invitations")
+        .insert(insertPayload)
+        .select("id, role, label, expires_at, created_at")
+        .single();
+
+      if (fallbackRes.error || !fallbackRes.data) {
+        console.error("[POST /api/account/invitations] fallback insert error:", fallbackRes.error);
+        return NextResponse.json({ error: "Failed to create invitation" }, { status: 500 });
+      }
+      data = fallbackRes.data;
+    } else if (insertRes.error || !insertRes.data) {
+      console.error("[POST /api/account/invitations] insert error:", insertRes.error);
       return NextResponse.json(
         { error: "Failed to create invitation" },
         { status: 500 },
       );
+    } else {
+      data = insertRes.data;
     }
 
     return NextResponse.json(

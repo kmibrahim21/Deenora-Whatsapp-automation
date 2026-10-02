@@ -18,7 +18,17 @@ const TYPE_ICON: Record<Notification["type"], typeof Bell> = {
   conversation_assigned: UserPlus,
 };
 
+import { RequirePermission } from "@/components/auth/require-permission";
+
 export default function NotificationsPage() {
+  return (
+    <RequirePermission permission="notifications">
+      <NotificationsPageContent />
+    </RequirePermission>
+  );
+}
+
+function NotificationsPageContent() {
   const t = useTranslations("Notifications");
   const router = useRouter();
   const { accountId } = useAuth();

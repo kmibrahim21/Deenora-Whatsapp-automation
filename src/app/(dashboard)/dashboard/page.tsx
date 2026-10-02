@@ -38,7 +38,17 @@ import { useTranslations } from 'next-intl'
 
 type RangeDays = 7 | 30 | 90
 
+import { RequirePermission } from '@/components/auth/require-permission'
+
 export default function DashboardPage() {
+  return (
+    <RequirePermission permission="dashboard">
+      <DashboardPageContent />
+    </RequirePermission>
+  )
+}
+
+function DashboardPageContent() {
   const t = useTranslations('Dashboard.page')
   const { defaultCurrency } = useAuth()
   const [metrics, setMetrics] = useState<MetricsBundle | null>(null)

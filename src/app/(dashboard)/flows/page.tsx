@@ -82,7 +82,17 @@ const TEMPLATE_ICONS = {
   UserPlus,
 } as const;
 
+import { RequirePermission } from "@/components/auth/require-permission";
+
 export default function FlowsPage() {
+  return (
+    <RequirePermission permission="flows">
+      <FlowsPageContent />
+    </RequirePermission>
+  );
+}
+
+function FlowsPageContent() {
   const router = useRouter();
   const canCreate = useCan("send-messages");
   const t = useTranslations("Flows.list");

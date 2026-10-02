@@ -45,6 +45,7 @@ export interface Profile {
    * `@/lib/auth/roles` rather than comparing this string directly.
    */
   account_role?: AccountRole;
+  agent_permissions?: string[] | null;
   created_at: string;
 }
 
@@ -74,6 +75,7 @@ export interface AccountMember {
   email: string | null;
   avatar_url: string | null;
   role: AccountRole;
+  agent_permissions?: string[] | null;
   joined_at: string;
 }
 
@@ -88,6 +90,7 @@ export interface AccountInvitation {
   account_id: string;
   /** Roles offered via invite — owner is never offered. */
   role: Exclude<AccountRole, "owner">;
+  agent_permissions?: string[] | null;
   created_by_user_id: string | null;
   label: string | null;
   created_at: string;

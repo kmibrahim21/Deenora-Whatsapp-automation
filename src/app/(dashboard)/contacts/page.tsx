@@ -64,7 +64,17 @@ interface ContactWithTags extends Contact {
   tags?: Tag[];
 }
 
+import { RequirePermission } from '@/components/auth/require-permission';
+
 export default function ContactsPage() {
+  return (
+    <RequirePermission permission="contacts">
+      <ContactsPageContent />
+    </RequirePermission>
+  );
+}
+
+function ContactsPageContent() {
   const t = useTranslations('Contacts.page');
   const supabase = createClient();
   const canEdit = useCan('send-messages');

@@ -12,7 +12,17 @@ import { canEditSettings } from '@/lib/auth/roles';
 
 type Tab = 'playground' | 'setup' | 'usage';
 
+import { RequirePermission } from '@/components/auth/require-permission';
+
 export default function AgentsPage() {
+  return (
+    <RequirePermission permission="agents">
+      <AgentsPageContent />
+    </RequirePermission>
+  );
+}
+
+function AgentsPageContent() {
   const t = useTranslations('Agents');
   const { accountRole } = useAuth();
   const canViewUsage = accountRole ? canEditSettings(accountRole) : false;

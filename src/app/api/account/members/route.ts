@@ -16,6 +16,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account";
 import { canManageMembers, isAccountRole } from "@/lib/auth/roles";
+import { parseAgentPermissions } from "@/lib/auth/roles";
 import type { AccountMember } from "@/types";
 
 interface ProfileRow {
@@ -24,6 +25,8 @@ interface ProfileRow {
   email: string | null;
   avatar_url: string | null;
   account_role: string;
+  agent_permissions?: string[] | null;
+  beta_features?: string[] | null;
   created_at: string;
 }
 
@@ -31,29 +34,37 @@ export async function GET() {
   try {
     const ctx = await getCurrentAccount();
 
-    // RLS on profiles allows reading any row whose account matches
-    // the caller's, so this query is naturally account-scoped.
+    // Try selecting agent_permissions along with beta_features
+    let queryData: ProfileRow[] | null = null;
     const { data, error } = await ctx.supabase
       .from("profiles")
-      .select("user_id, full_name, email, avatar_url, account_role, created_at")
+      .select("user_id, full_name, email, avatar_url, account_role, agent_permissions, beta_features, created_at")
       .eq("account_id", ctx.accountId)
       .order("created_at", { ascending: true });
 
-    if (error) {
+    if (error && error.code === '42703') {
+      const fallback = await ctx.supabase
+        .from("profiles")
+        .select("user_id, full_name, email, avatar_url, account_role, beta_features, created_at")
+        .eq("account_id", ctx.accountId)
+        .order("created_at", { ascending: true });
+      if (fallback.error) {
+        console.error("[GET /api/account/members] fallback error:", fallback.error);
+        return NextResponse.json({ error: "Failed to load members" }, { status: 500 });
+      }
+      queryData = fallback.data as ProfileRow[];
+    } else if (error) {
       console.error("[GET /api/account/members] fetch error:", error);
-      return NextResponse.json(
-        { error: "Failed to load members" },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: "Failed to load members" }, { status: 500 });
+    } else {
+      queryData = data as ProfileRow[];
     }
 
     const canSeeEmails = canManageMembers(ctx.role);
 
-    const members: AccountMember[] = (data as ProfileRow[]).flatMap((row) => {
-      // Defensive: the DB enum should never let an unknown role
-      // through, but if a migration ever broadens the enum without
-      // updating TS, skip the row rather than crash the page.
+    const members: AccountMember[] = (queryData ?? []).flatMap((row) => {
       if (!isAccountRole(row.account_role)) return [];
+      const perms = parseAgentPermissions(row.agent_permissions, row.beta_features);
       return [
         {
           user_id: row.user_id,
@@ -61,6 +72,7 @@ export async function GET() {
           email: canSeeEmails ? row.email : null,
           avatar_url: row.avatar_url,
           role: row.account_role,
+          agent_permissions: perms,
           joined_at: row.created_at,
         },
       ];

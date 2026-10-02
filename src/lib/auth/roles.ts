@@ -107,3 +107,152 @@ export function canDeleteAccount(role: AccountRole): boolean {
 export function canTransferOwnership(role: AccountRole): boolean {
   return role === "owner";
 }
+
+// ============================================================
+// Granular Agent Permissions
+//
+// Allows restricting what an Agent team member can see and access.
+// Inbox is always granted by default. Other sections (Dashboard,
+// Contacts, Pipelines, Broadcasts, Automations, Flows, AI Agents,
+// Notifications) can be granted per-agent upon invite or edit.
+// Owner / Admin / Viewer roles have access to all sections.
+// ============================================================
+
+export type AgentPermission =
+  | "inbox"
+  | "dashboard"
+  | "notifications"
+  | "contacts"
+  | "pipelines"
+  | "broadcasts"
+  | "automations"
+  | "flows"
+  | "agents";
+
+export interface PermissionOption {
+  key: AgentPermission;
+  labelKey: string;
+  defaultLabel: string;
+  descriptionKey: string;
+  defaultDescription: string;
+  isDefault?: boolean;
+}
+
+export const AGENT_PERMISSION_OPTIONS: readonly PermissionOption[] = [
+  {
+    key: "inbox",
+    labelKey: "permInbox",
+    defaultLabel: "Inbox (ইনবক্স / মেসেজ)",
+    descriptionKey: "permInboxDesc",
+    defaultDescription: "View and respond to customer conversations",
+    isDefault: true,
+  },
+  {
+    key: "dashboard",
+    labelKey: "permDashboard",
+    defaultLabel: "Dashboard (ড্যাশবোর্ড)",
+    descriptionKey: "permDashboardDesc",
+    defaultDescription: "View account analytics and message statistics",
+  },
+  {
+    key: "notifications",
+    labelKey: "permNotifications",
+    defaultLabel: "Notifications (নোটিফিকেশন)",
+    descriptionKey: "permNotificationsDesc",
+    defaultDescription: "View system alerts and activity notifications",
+  },
+  {
+    key: "contacts",
+    labelKey: "permContacts",
+    defaultLabel: "Contacts (কন্টাক্টস)",
+    descriptionKey: "permContactsDesc",
+    defaultDescription: "View and manage customer contact list",
+  },
+  {
+    key: "pipelines",
+    labelKey: "permPipelines",
+    defaultLabel: "Pipelines (পাইপলাইন ও ডিল)",
+    descriptionKey: "permPipelinesDesc",
+    defaultDescription: "View and move deal stages in sales pipelines",
+  },
+  {
+    key: "broadcasts",
+    labelKey: "permBroadcasts",
+    defaultLabel: "Broadcasts (ব্রডকাস্ট)",
+    descriptionKey: "permBroadcastsDesc",
+    defaultDescription: "Create and send bulk message broadcasts",
+  },
+  {
+    key: "automations",
+    labelKey: "permAutomations",
+    defaultLabel: "Automations (অটোমেশন)",
+    descriptionKey: "permAutomationsDesc",
+    defaultDescription: "Configure message auto-responders and triggers",
+  },
+  {
+    key: "flows",
+    labelKey: "permFlows",
+    defaultLabel: "Flows (ফ্লো বিল্ডার)",
+    descriptionKey: "permFlowsDesc",
+    defaultDescription: "Build interactive chatbot conversation flows",
+  },
+  {
+    key: "agents",
+    labelKey: "permAgents",
+    defaultLabel: "AI Agents (এআই এজেন্ট)",
+    descriptionKey: "permAgentsDesc",
+    defaultDescription: "View and configure AI support agent settings",
+  },
+] as const;
+
+export const DEFAULT_AGENT_PERMISSIONS: AgentPermission[] = ["inbox"];
+
+/** Parse raw permission array or fallback from beta_features */
+export function parseAgentPermissions(
+  agentPerms: string[] | null | undefined,
+  betaFeatures?: string[] | null
+): AgentPermission[] {
+  const result = new Set<AgentPermission>(["inbox"]);
+  if (Array.isArray(agentPerms)) {
+    for (const p of agentPerms) {
+      if (p && AGENT_PERMISSION_OPTIONS.some((opt) => opt.key === p)) {
+        result.add(p as AgentPermission);
+      }
+    }
+  }
+  if (Array.isArray(betaFeatures)) {
+    for (const f of betaFeatures) {
+      if (f.startsWith("perm:")) {
+        const key = f.slice(5);
+        if (AGENT_PERMISSION_OPTIONS.some((opt) => opt.key === key)) {
+          result.add(key as AgentPermission);
+        }
+      }
+    }
+  }
+  return Array.from(result);
+}
+
+/**
+ * Returns true if the given role + agent_permissions allows accessing a feature/page.
+ * Owner, Admin, and Viewer always have access to all sections.
+ * Agent only has access if the feature is explicitly in `agentPermissions` (or 'inbox').
+ */
+export function hasPermission(
+  role: AccountRole | null | undefined,
+  permissionKey: AgentPermission | string,
+  agentPermissions?: string[] | null
+): boolean {
+  if (!role) return false;
+  if (role === "owner" || role === "admin" || role === "viewer") {
+    return true;
+  }
+  if (role === "agent") {
+    if (permissionKey === "inbox" || permissionKey === "settings") return true;
+    if (!agentPermissions || agentPermissions.length === 0) {
+      return permissionKey === "inbox";
+    }
+    return agentPermissions.includes(permissionKey);
+  }
+  return false;
+}

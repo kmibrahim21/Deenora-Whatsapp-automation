@@ -58,7 +58,17 @@ const TEMPLATE_ICON: Record<TemplateSlug, typeof Zap> = {
   follow_up_reminder: PhoneCall,
 }
 
+import { RequirePermission } from "@/components/auth/require-permission"
+
 export default function AutomationsPage() {
+  return (
+    <RequirePermission permission="automations">
+      <AutomationsPageContent />
+    </RequirePermission>
+  )
+}
+
+function AutomationsPageContent() {
   const router = useRouter()
   const canCreate = useCan("send-messages")
   const t = useTranslations("Automations.list")

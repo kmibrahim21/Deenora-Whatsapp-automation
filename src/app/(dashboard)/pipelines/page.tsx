@@ -45,7 +45,17 @@ const SPEC_DEFAULT_STAGES = [
   { name: "Won", color: "#22c55e", position: 4 }, // green
 ];
 
+import { RequirePermission } from "@/components/auth/require-permission";
+
 export default function PipelinesPage() {
+  return (
+    <RequirePermission permission="pipelines">
+      <PipelinesPageContent />
+    </RequirePermission>
+  );
+}
+
+function PipelinesPageContent() {
   const t = useTranslations("Pipelines.page");
   const supabase = createClient();
   const canEditSettings = useCan("edit-settings");

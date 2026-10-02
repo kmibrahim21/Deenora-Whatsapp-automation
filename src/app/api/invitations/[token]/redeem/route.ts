@@ -21,6 +21,8 @@ import { NextResponse } from "next/server";
 import type { PostgrestError } from "@supabase/supabase-js";
 
 import { hashInviteToken } from "@/lib/auth/invitations";
+import { parseAgentPermissions } from "@/lib/auth/roles";
+import { supabaseAdmin } from "@/lib/ai/admin-client";
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -81,11 +83,53 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const tokenHash = hashInviteToken(token);
+
+  // Read invitation row before redeeming to get agent_permissions
+  const dbAdmin = supabaseAdmin();
+  const { data: invRow } = await dbAdmin
+    .from("account_invitations")
+    .select("role, agent_permissions")
+    .eq("token_hash", tokenHash)
+    .maybeSingle();
+
   const { data: accountId, error } = await supabase.rpc("redeem_invitation", {
-    p_token_hash: hashInviteToken(token),
+    p_token_hash: tokenHash,
   });
 
   if (error) return rpcErrorToResponse(error);
+
+  // If redeemed invitation had agent_permissions or was for agent role, update profile
+  if (invRow && (invRow.role === "agent" || invRow.agent_permissions)) {
+    const perms = parseAgentPermissions((invRow as any).agent_permissions);
+    const permBetaFlags = perms.map((p) => `perm:${p}`);
+
+    const { data: userProfile } = await dbAdmin
+      .from("profiles")
+      .select("beta_features")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const existingBeta = (userProfile?.beta_features ?? []).filter(
+      (f) => !f.startsWith("perm:")
+    );
+    const newBeta = Array.from(new Set([...existingBeta, ...permBetaFlags]));
+
+    const { error: updateErr } = await dbAdmin
+      .from("profiles")
+      .update({
+        agent_permissions: perms,
+        beta_features: newBeta,
+      })
+      .eq("user_id", user.id);
+
+    if (updateErr && updateErr.code === "42703") {
+      await dbAdmin
+        .from("profiles")
+        .update({ beta_features: newBeta })
+        .eq("user_id", user.id);
+    }
+  }
 
   return NextResponse.json({ ok: true, accountId });
 }
