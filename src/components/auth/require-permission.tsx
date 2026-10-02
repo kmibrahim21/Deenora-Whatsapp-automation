@@ -3,7 +3,7 @@
 import { ReactNode } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { ShieldAlert, ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 
 interface RequirePermissionProps {
@@ -43,12 +43,10 @@ export function RequirePermission({
         <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
           আপনার টিম মেম্বার এজেন্টের জন্য এই সেকশনে পারমিশন দেওয়া নেই। এই ফিচারটি দেখতে চাইলে আপনার অ্যাকাউন্টের এডমিনকে পারমিশন আপডেট করার অনুরোধ করুন।
         </p>
-        <Button asChild className="gap-2">
-          <Link href="/inbox">
-            <ArrowLeft className="h-4 w-4" />
-            ইনবক্সে ফিরে যান (Go to Inbox)
-          </Link>
-        </Button>
+        <Link href="/inbox" className={buttonVariants({ className: "gap-2" })}>
+          <ArrowLeft className="h-4 w-4" />
+          ইনবক্সে ফিরে যান (Go to Inbox)
+        </Link>
       </div>
     );
   }

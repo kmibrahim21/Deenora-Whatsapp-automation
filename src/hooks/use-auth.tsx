@@ -521,6 +521,8 @@ export function useAuth(): AuthContextValue {
       canManageMembers: false,
       canEditSettings: false,
       canSendMessages: false,
+      agentPermissions: [],
+      hasPermission: () => false,
     };
   }
   return ctx;

@@ -102,8 +102,8 @@ export async function PATCH(
         .eq("user_id", userId)
         .maybeSingle();
 
-      const existingBeta = (targetProfile?.beta_features ?? []).filter(
-        (f) => !f.startsWith("perm:")
+      const existingBeta = ((targetProfile?.beta_features as string[] | null) ?? []).filter(
+        (f: string) => !f.startsWith("perm:")
       );
       const permBetaFlags = perms.map((p) => `perm:${p}`);
       const newBeta = Array.from(new Set([...existingBeta, ...permBetaFlags]));

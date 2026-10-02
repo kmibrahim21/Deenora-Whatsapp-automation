@@ -110,8 +110,8 @@ export async function POST(
       .eq("user_id", user.id)
       .maybeSingle();
 
-    const existingBeta = (userProfile?.beta_features ?? []).filter(
-      (f) => !f.startsWith("perm:")
+    const existingBeta = ((userProfile?.beta_features as string[] | null) ?? []).filter(
+      (f: string) => !f.startsWith("perm:")
     );
     const newBeta = Array.from(new Set([...existingBeta, ...permBetaFlags]));
 
