@@ -253,7 +253,7 @@ export async function displayNotification(
     try {
       let reg = await navigator.serviceWorker.getRegistration();
       if (!reg) {
-        reg = await registerNotificationServiceWorker();
+        reg = (await registerNotificationServiceWorker()) ?? undefined;
       }
       if (reg && typeof reg.showNotification === "function") {
         await reg.showNotification(title, {
