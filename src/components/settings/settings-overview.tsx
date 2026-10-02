@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronRight, Loader2, Smartphone } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { createClient } from '@/lib/supabase/client';
@@ -12,6 +12,7 @@ import { CURRENCIES } from '@/lib/currency';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { PWAInstallButton } from '@/components/pwa/pwa-install-button';
 
 import { SECTION_META, type SettingsSection } from './settings-sections';
 import { SettingsChip, StatusDot } from './settings-chip';
@@ -248,6 +249,26 @@ export function SettingsOverview({
           </SettingsChip>
         ) : null}
       </Card>
+
+      {/* PWA App Install Banner */}
+      <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3.5 sm:px-5">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+            <Smartphone className="size-4.5" />
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-foreground">
+              WhatsApp CRM App
+            </div>
+            <div className="truncate text-xs text-muted-foreground">
+              Install on your phone or desktop for instant access & alerts
+            </div>
+          </div>
+        </div>
+        <div className="shrink-0">
+          <PWAInstallButton />
+        </div>
+      </div>
 
       {/* Status tiles */}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
