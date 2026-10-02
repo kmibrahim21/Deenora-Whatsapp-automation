@@ -31,11 +31,15 @@ import {
 // (the account-menu Settings link points at `?tab=whatsapp`) and can't
 // navigate away. Mirror the login/signup split: a thin wrapper supplies
 // the boundary; the inner component reads the query string.
+import { RequirePermission } from '@/components/auth/require-permission';
+
 export default function SettingsPage() {
   return (
-    <Suspense fallback={null}>
-      <SettingsPageInner />
-    </Suspense>
+    <RequirePermission permission="settings">
+      <Suspense fallback={null}>
+        <SettingsPageInner />
+      </Suspense>
+    </RequirePermission>
   );
 }
 

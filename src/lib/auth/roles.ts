@@ -127,7 +127,8 @@ export type AgentPermission =
   | "broadcasts"
   | "automations"
   | "flows"
-  | "agents";
+  | "agents"
+  | "settings";
 
 export interface PermissionOption {
   key: AgentPermission;
@@ -203,6 +204,13 @@ export const AGENT_PERMISSION_OPTIONS: readonly PermissionOption[] = [
     descriptionKey: "permAgentsDesc",
     defaultDescription: "View and configure AI support agent settings",
   },
+  {
+    key: "settings",
+    labelKey: "permSettings",
+    defaultLabel: "Settings (সেটিংস)",
+    descriptionKey: "permSettingsDesc",
+    defaultDescription: "View and configure account settings",
+  },
 ] as const;
 
 export const DEFAULT_AGENT_PERMISSIONS: AgentPermission[] = ["inbox"];
@@ -248,11 +256,11 @@ export function hasPermission(
     return true;
   }
   if (role === "agent") {
-    if (permissionKey === "inbox" || permissionKey === "settings") return true;
+    if (permissionKey === "inbox") return true;
     if (!agentPermissions || agentPermissions.length === 0) {
       return permissionKey === "inbox";
     }
-    return agentPermissions.includes(permissionKey);
+    return agentPermissions.includes(permissionKey as AgentPermission);
   }
   return false;
 }
