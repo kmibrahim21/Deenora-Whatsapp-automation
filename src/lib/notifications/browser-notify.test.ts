@@ -3,17 +3,26 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BODY_MAX_CHARS,
   BROWSER_NOTIFY_STORAGE_KEY,
+  BROWSER_NOTIFY_SOUND_STORAGE_KEY,
+  BROWSER_NOTIFY_SOUND_CHANGE_EVENT,
   DEDUPE_WINDOW_MS,
   DEFAULT_NOTIFICATION_LABELS,
   buildNotificationContent,
   conversationHref,
+  displayNotification,
   getNotificationPermission,
+  initAudioOnUserGesture,
   pickContactDisplayName,
+  playNotificationSound,
   readBrowserNotifyPref,
+  readBrowserNotifySoundPref,
+  registerNotificationServiceWorker,
+  resetAudioContextForTesting,
   shouldNotifyForMessage,
   truncateBody,
   viewedConversationFromLocation,
   writeBrowserNotifyPref,
+  writeBrowserNotifySoundPref,
   type NotifiableMessage,
 } from "./browser-notify";
 
@@ -274,6 +283,7 @@ describe("conversationHref", () => {
 
 describe("browser-only helpers without a window", () => {
   afterEach(() => {
+    resetAudioContextForTesting();
     vi.unstubAllGlobals();
   });
 
@@ -313,5 +323,153 @@ describe("browser-only helpers without a window", () => {
   it("report unsupported when window lacks Notification", () => {
     vi.stubGlobal("window", {});
     expect(getNotificationPermission()).toBe("unsupported");
+  });
+
+  it("defaults sound preference to ON (true)", () => {
+    expect(readBrowserNotifySoundPref()).toBe(true);
+  });
+
+  it("round-trips the sound preference through localStorage", () => {
+    const store = new Map<string, string>();
+    const events: string[] = [];
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => void store.set(k, v),
+        removeItem: (k: string) => void store.delete(k),
+      },
+      dispatchEvent: (e: { type: string }) => {
+        events.push(e.type);
+        return true;
+      },
+    });
+    vi.stubGlobal("Event", class { constructor(public type: string) {} });
+
+    expect(readBrowserNotifySoundPref()).toBe(true);
+    writeBrowserNotifySoundPref(false);
+    expect(store.get(BROWSER_NOTIFY_SOUND_STORAGE_KEY)).toBe("0");
+    expect(readBrowserNotifySoundPref()).toBe(false);
+    writeBrowserNotifySoundPref(true);
+    expect(store.get(BROWSER_NOTIFY_SOUND_STORAGE_KEY)).toBe("1");
+    expect(readBrowserNotifySoundPref()).toBe(true);
+    expect(events).toContain(BROWSER_NOTIFY_SOUND_CHANGE_EVENT);
+  });
+
+  it("plays notification chime via Web Audio API when available", () => {
+    resetAudioContextForTesting();
+    const oscFrequencies: number[] = [];
+    const mockOsc = {
+      type: "sine",
+      frequency: {
+        setValueAtTime: (val: number) => oscFrequencies.push(val),
+      },
+      connect: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+    };
+    const mockGain = {
+      gain: {
+        setValueAtTime: vi.fn(),
+        exponentialRampToValueAtTime: vi.fn(),
+      },
+      connect: vi.fn(),
+    };
+    class MockAudioContext {
+      state = "running";
+      currentTime = 0;
+      destination = {};
+      createOscillator = () => mockOsc;
+      createGain = () => mockGain;
+      resume = vi.fn().mockResolvedValue(undefined);
+    }
+
+    vi.stubGlobal("window", {
+      AudioContext: MockAudioContext,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+
+    expect(() => playNotificationSound()).not.toThrow();
+    expect(mockOsc.connect).toHaveBeenCalledWith(mockGain);
+    expect(mockGain.connect).toHaveBeenCalledWith(expect.anything());
+    expect(mockOsc.start).toHaveBeenCalled();
+    expect(mockOsc.stop).toHaveBeenCalled();
+    // Verifies two-tone chime frequencies (880 Hz -> 660 Hz)
+    expect(oscFrequencies).toEqual([880, 660]);
+  });
+
+  it("initializes audio on user gesture cleanly", () => {
+    const listeners: Record<string, () => void> = {};
+    vi.stubGlobal("window", {
+      addEventListener: vi.fn((evt: string, fn: () => void) => {
+        listeners[evt] = fn;
+      }),
+      removeEventListener: vi.fn((evt: string) => {
+        delete listeners[evt];
+      }),
+    });
+
+    const cleanup = initAudioOnUserGesture();
+    expect(typeof cleanup).toBe("function");
+    cleanup();
+  });
+
+  it("handles displayNotification using ServiceWorker registration on mobile/supported environments", async () => {
+    const showNotificationMock = vi.fn().mockResolvedValue(undefined);
+    const mockRegistration = {
+      showNotification: showNotificationMock,
+    };
+
+    vi.stubGlobal("window", {
+      Notification: {
+        permission: "granted",
+      },
+    });
+    vi.stubGlobal("navigator", {
+      serviceWorker: {
+        getRegistration: vi.fn().mockResolvedValue(mockRegistration),
+        register: vi.fn().mockResolvedValue(mockRegistration),
+      },
+    });
+
+    await displayNotification("Customer Alert", {
+      body: "Hello there",
+      tag: "conv-123",
+      url: "/inbox?c=conv-123",
+    });
+
+    expect(showNotificationMock).toHaveBeenCalledWith("Customer Alert", expect.objectContaining({
+      body: "Hello there",
+      tag: "conv-123",
+      data: expect.objectContaining({ url: "/inbox?c=conv-123" }),
+    }));
+  });
+
+  it("falls back to Notification constructor when ServiceWorker is unavailable", async () => {
+    const notificationInstances: any[] = [];
+    class MockNotification {
+      static permission = "granted";
+      public onclick: any = null;
+      constructor(public title: string, public options: any) {
+        notificationInstances.push(this);
+      }
+      close = vi.fn();
+    }
+
+    vi.stubGlobal("window", {
+      Notification: MockNotification,
+    });
+    vi.stubGlobal("navigator", {});
+
+    const onClick = vi.fn();
+    await displayNotification("Desktop Alert", { body: "Test" }, onClick);
+
+    expect(notificationInstances).toHaveLength(1);
+    expect(notificationInstances[0].title).toBe("Desktop Alert");
+    expect(notificationInstances[0].options.body).toBe("Test");
+
+    notificationInstances[0].onclick();
+    expect(onClick).toHaveBeenCalled();
+    expect(notificationInstances[0].close).toHaveBeenCalled();
   });
 });

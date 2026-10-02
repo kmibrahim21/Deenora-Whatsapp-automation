@@ -8,11 +8,14 @@ import type { ContentType, SenderType } from "@/types";
  *
  * The hook in src/hooks/use-browser-notifications.ts feeds realtime
  * `messages` INSERTs through `shouldNotifyForMessage`, then renders the
- * result of `buildNotificationContent` with `new Notification(...)`.
+ * result of `buildNotificationContent` with desktop / mobile notifications.
  */
 
 /** localStorage key for the device-scoped opt-in. */
 export const BROWSER_NOTIFY_STORAGE_KEY = "wacrm:browser-notifications";
+
+/** localStorage key for the device-scoped notification sound opt-in (default: ON). */
+export const BROWSER_NOTIFY_SOUND_STORAGE_KEY = "wacrm:browser-notifications-sound";
 
 /**
  * Same-tab change signal. `storage` events only fire in *other* tabs,
@@ -20,6 +23,7 @@ export const BROWSER_NOTIFY_STORAGE_KEY = "wacrm:browser-notifications";
  * through this window event instead.
  */
 export const BROWSER_NOTIFY_CHANGE_EVENT = "wacrm:browser-notifications-change";
+export const BROWSER_NOTIFY_SOUND_CHANGE_EVENT = "wacrm:browser-notifications-sound-change";
 
 /** A duplicate INSERT for the same message id inside this window is ignored. */
 export const DEDUPE_WINDOW_MS = 30_000;
@@ -203,6 +207,92 @@ export function getNotificationPermission(): BrowserNotifyPermission {
   return window.Notification.permission;
 }
 
+/**
+ * Registers the notification service worker if supported by the browser (mobile & PWA support).
+ */
+export async function registerNotificationServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+    return null;
+  }
+  try {
+    const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    return reg;
+  } catch (err) {
+    console.debug("[browser-notify] SW registration skipped or failed:", err);
+    return null;
+  }
+}
+
+export interface DisplayNotificationOptions {
+  body?: string;
+  tag?: string;
+  icon?: string;
+  badge?: string;
+  url?: string;
+  data?: Record<string, unknown>;
+}
+
+/**
+ * Displays a notification across Desktop and Mobile (Android Chrome/PWA/iOS PWA).
+ *
+ * Tries ServiceWorkerRegistration.showNotification() first (which is required on Android Chrome
+ * where new Notification() throws an Illegal Constructor error), and falls back to
+ * `new Notification(...)` on desktop browsers.
+ */
+export async function displayNotification(
+  title: string,
+  options: DisplayNotificationOptions = {},
+  onClickFallback?: () => void,
+): Promise<void> {
+  if (typeof window === "undefined") return;
+
+  const url = options.url || "/inbox";
+
+  // 1. Try Service Worker showNotification (Works on Mobile Android, Chrome/Edge/Firefox, PWA)
+  if ("serviceWorker" in navigator) {
+    try {
+      let reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        reg = await registerNotificationServiceWorker();
+      }
+      if (reg && typeof reg.showNotification === "function") {
+        await reg.showNotification(title, {
+          body: options.body,
+          tag: options.tag,
+          icon: options.icon || "/icon",
+          badge: options.badge || "/icon",
+          data: {
+            url,
+            ...options.data,
+          },
+        });
+        return;
+      }
+    } catch (err) {
+      console.debug("[browser-notify] SW showNotification failed, trying fallback:", err);
+    }
+  }
+
+  // 2. Fallback to standard Notification constructor (Desktop browsers)
+  if ("Notification" in window && window.Notification.permission === "granted") {
+    try {
+      const n = new window.Notification(title, {
+        body: options.body,
+        tag: options.tag,
+        icon: options.icon || "/icon",
+      });
+      if (onClickFallback) {
+        n.onclick = () => {
+          onClickFallback();
+          n.close();
+        };
+      }
+    } catch (err) {
+      console.error("[browser-notify] Failed to display notification:", err);
+    }
+  }
+}
+
 /** Device-scoped opt-in. Defaults to off; a bad/absent value reads as off. */
 export function readBrowserNotifyPref(): boolean {
   if (typeof window === "undefined") return false;
@@ -243,4 +333,139 @@ export function subscribeBrowserNotifyPref(onChange: () => void): () => void {
     window.removeEventListener(BROWSER_NOTIFY_CHANGE_EVENT, onChange);
     window.removeEventListener("storage", onStorage);
   };
+}
+
+/** Device-scoped notification sound preference. Defaults to ON (true). */
+export function readBrowserNotifySoundPref(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const val = window.localStorage.getItem(BROWSER_NOTIFY_SOUND_STORAGE_KEY);
+    return val !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function writeBrowserNotifySoundPref(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (enabled) {
+      window.localStorage.setItem(BROWSER_NOTIFY_SOUND_STORAGE_KEY, "1");
+    } else {
+      window.localStorage.setItem(BROWSER_NOTIFY_SOUND_STORAGE_KEY, "0");
+    }
+  } catch {
+    // Best-effort
+  }
+  window.dispatchEvent(new Event(BROWSER_NOTIFY_SOUND_CHANGE_EVENT));
+}
+
+export function subscribeBrowserNotifySoundPref(onChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === null || e.key === BROWSER_NOTIFY_SOUND_STORAGE_KEY) onChange();
+  };
+  window.addEventListener(BROWSER_NOTIFY_SOUND_CHANGE_EVENT, onChange);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener(BROWSER_NOTIFY_SOUND_CHANGE_EVENT, onChange);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+// ---------------------------------------------------------------------
+// Notification sound via Web Audio API (two-tone chime: 880 Hz -> 660 Hz)
+// ---------------------------------------------------------------------
+
+let globalAudioCtx: AudioContext | null = null;
+
+export function resetAudioContextForTesting(): void {
+  globalAudioCtx = null;
+}
+
+export function getAudioContext(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  const AudioContextClass =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextClass) return null;
+
+  if (!globalAudioCtx || globalAudioCtx.state === "closed") {
+    try {
+      globalAudioCtx = new AudioContextClass();
+    } catch {
+      return null;
+    }
+  }
+  return globalAudioCtx;
+}
+
+/**
+ * Resumes/unlocks the AudioContext upon first user gesture (click/keypress)
+ * to satisfy the browser's autoplay policy.
+ */
+export function initAudioOnUserGesture(): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  const unlock = () => {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+    window.removeEventListener("click", unlock, true);
+    window.removeEventListener("keydown", unlock, true);
+    window.removeEventListener("touchstart", unlock, true);
+  };
+
+  window.addEventListener("click", unlock, { capture: true, passive: true });
+  window.addEventListener("keydown", unlock, { capture: true, passive: true });
+  window.addEventListener("touchstart", unlock, { capture: true, passive: true });
+
+  return () => {
+    window.removeEventListener("click", unlock, true);
+    window.removeEventListener("keydown", unlock, true);
+    window.removeEventListener("touchstart", unlock, true);
+  };
+}
+
+/**
+ * Plays a short, pleasant two-tone chime (880 Hz -> 660 Hz sine, ~0.15s each).
+ * Safe to call whether the tab is focused or in the background.
+ */
+export function playNotificationSound(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+
+    // Tone 1: 880 Hz (~0.15s), Tone 2: 660 Hz (~0.15s)
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.setValueAtTime(660, now + 0.14);
+
+    // Smooth envelope with exponential attack & decay to prevent clicking
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+    gain.gain.setValueAtTime(0.18, now + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.15, now + 0.16);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.30);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.31);
+  } catch (err) {
+    // Non-fatal if audio hardware is unavailable or disabled
+    console.debug("[browser-notify] chime playback error:", err);
+  }
 }

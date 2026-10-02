@@ -1745,6 +1745,8 @@
       "description": "Receba um alerta na área de trabalho para cada nova mensagem de cliente, mesmo quando estiver em outra página. Salvo neste dispositivo.",
       "toggleLabel": "Avisar sobre novas mensagens de clientes",
       "toggleDesc": "Funciona apenas enquanto o app estiver aberto em uma aba do navegador.",
+      "soundToggleLabel": "Som de notificação",
+      "soundToggleDesc": "Toca um sinal sonoro quando uma nova mensagem chega.",
       "statusGranted": "Permitido pelo seu navegador.",
       "statusDefault": "Ao ativar, seu navegador pedirá permissão.",
       "statusDenied": "Bloqueado nas configurações do navegador",

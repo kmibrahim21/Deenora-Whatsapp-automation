@@ -1745,6 +1745,8 @@
       "description": "Recibe una alerta de escritorio por cada nuevo mensaje de cliente, incluso cuando estés en otra página. Se guarda en este dispositivo.",
       "toggleLabel": "Avisarme de nuevos mensajes de clientes",
       "toggleDesc": "Solo funciona mientras la app esté abierta en una pestaña del navegador.",
+      "soundToggleLabel": "Sonido de notificación",
+      "soundToggleDesc": "Reproduce un timbre cuando llega un nuevo mensaje.",
       "statusGranted": "Permitido por tu navegador.",
       "statusDefault": "Al activarlo, tu navegador pedirá permiso.",
       "statusDenied": "Bloqueado en la configuración del navegador",

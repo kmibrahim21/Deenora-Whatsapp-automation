@@ -1757,6 +1757,8 @@
       "description": "다른 페이지를 보고 있어도 새 고객 메시지마다 데스크톱 알림을 받습니다. 이 기기에 저장됩니다.",
       "toggleLabel": "새 고객 메시지 알림 받기",
       "toggleDesc": "브라우저 탭에 앱이 열려 있는 동안에만 작동합니다.",
+      "soundToggleLabel": "알림 소리",
+      "soundToggleDesc": "새 메시지가 도착하면 알림음을 재생합니다.",
       "statusGranted": "브라우저에서 허용됨.",
       "statusDefault": "켜면 브라우저가 알림 권한을 요청합니다.",
       "statusDenied": "브라우저 설정에서 차단됨",

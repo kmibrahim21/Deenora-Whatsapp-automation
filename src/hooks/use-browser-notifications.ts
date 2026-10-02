@@ -9,16 +9,23 @@ import {
   DEFAULT_NOTIFICATION_LABELS,
   buildNotificationContent,
   conversationHref,
+  displayNotification,
   getNotificationPermission,
+  initAudioOnUserGesture,
   pickContactDisplayName,
+  playNotificationSound,
   readBrowserNotifyPref,
+  readBrowserNotifySoundPref,
+  registerNotificationServiceWorker,
   shouldNotifyForMessage,
   subscribeBrowserNotifyPref,
+  subscribeBrowserNotifySoundPref,
   viewedConversationFromLocation,
   type NotificationLabels,
 } from "@/lib/notifications/browser-notify";
 
 const serverSnapshot = () => false;
+const serverSoundSnapshot = () => true;
 
 /**
  * The device-scoped "browser notifications" opt-in, kept in sync with
@@ -29,6 +36,18 @@ export function useBrowserNotifyPref(): boolean {
     subscribeBrowserNotifyPref,
     readBrowserNotifyPref,
     serverSnapshot,
+  );
+}
+
+/**
+ * The device-scoped "notification sound" opt-in (default: ON), kept in sync with
+ * localStorage across this tab and other tabs.
+ */
+export function useBrowserNotifySoundPref(): boolean {
+  return useSyncExternalStore(
+    subscribeBrowserNotifySoundPref,
+    readBrowserNotifySoundPref,
+    serverSoundSnapshot,
   );
 }
 
@@ -52,6 +71,17 @@ export function useBrowserNotifications(): void {
   const enabled = useBrowserNotifyPref();
   const router = useRouter();
   const t = useTranslations("Settings.browserNotifications.labels");
+
+  // Register service worker for mobile notifications (Android / PWA)
+  useEffect(() => {
+    void registerNotificationServiceWorker();
+  }, []);
+
+  // Unlock AudioContext on first user gesture (click/keypress) so background chime works
+  useEffect(() => {
+    const cleanup = initAudioOnUserGesture();
+    return cleanup;
+  }, []);
 
   // Translated labels, read inside the async Realtime callback. Kept in
   // a ref (assigned in an effect, not during render) so a locale change
@@ -81,6 +111,11 @@ export function useBrowserNotifications(): void {
     let cancelled = false;
 
     const notify = async (msg: Message) => {
+      // If sound is enabled on this device, play the pleasant chime
+      if (readBrowserNotifySoundPref()) {
+        playNotificationSound();
+      }
+
       // One small select to put the contact's name in the title. A
       // failure here just means the generic fallback title.
       const { data } = await supabase
@@ -99,24 +134,21 @@ export function useBrowserNotifications(): void {
         labelsRef.current,
       );
 
-      try {
-        const notification = new Notification(title, {
+      const targetHref = conversationHref(msg.conversation_id);
+      await displayNotification(
+        title,
+        {
           body,
-          // One alert per conversation: a second message from the same
-          // customer replaces the first instead of stacking.
           tag: msg.conversation_id,
           icon: "/icon",
-        });
-        notification.onclick = () => {
+          badge: "/icon",
+          url: targetHref,
+        },
+        () => {
           window.focus();
-          router.push(conversationHref(msg.conversation_id));
-          notification.close();
-        };
-      } catch (err) {
-        // Some browsers throw from the constructor (e.g. Android Chrome
-        // requires a service worker). Non-fatal.
-        console.error("[useBrowserNotifications] failed to show:", err);
-      }
+          router.push(targetHref);
+        }
+      );
     };
 
     const channel = supabase

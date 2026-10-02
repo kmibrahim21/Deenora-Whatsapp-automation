@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useSyncExternalStore } from 'react';
-import { Bell, BellRing, CircleAlert, Loader2 } from 'lucide-react';
+import { Bell, BellRing, CircleAlert, Loader2, Volume2, VolumeX } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 
@@ -14,11 +14,17 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
-import { useBrowserNotifyPref } from '@/hooks/use-browser-notifications';
+import {
+  useBrowserNotifyPref,
+  useBrowserNotifySoundPref,
+} from '@/hooks/use-browser-notifications';
 import {
   BROWSER_NOTIFY_CHANGE_EVENT,
+  displayNotification,
   getNotificationPermission,
+  playNotificationSound,
   writeBrowserNotifyPref,
+  writeBrowserNotifySoundPref,
   type BrowserNotifyPermission,
 } from '@/lib/notifications/browser-notify';
 
@@ -48,6 +54,7 @@ const serverPermission = (): BrowserNotifyPermission => 'unsupported';
 export function BrowserNotificationsCard({ className }: { className?: string }) {
   const t = useTranslations('Settings.browserNotifications');
   const enabled = useBrowserNotifyPref();
+  const soundEnabled = useBrowserNotifySoundPref();
   const permission = useSyncExternalStore(
     subscribePermission,
     getNotificationPermission,
@@ -84,12 +91,17 @@ export function BrowserNotificationsCard({ className }: { className?: string }) 
     }
   };
 
-  const sendTest = () => {
+  const sendTest = async () => {
+    if (soundEnabled) {
+      playNotificationSound();
+    }
     try {
-      new Notification(t('testTitle'), {
+      await displayNotification(t('testTitle'), {
         body: t('testBody'),
         icon: '/icon',
+        badge: '/icon',
         tag: 'wacrm-test-notification',
+        url: '/inbox',
       });
     } catch {
       toast.error(t('unsupported'));
@@ -120,6 +132,7 @@ export function BrowserNotificationsCard({ className }: { className?: string }) 
           </p>
         ) : (
           <>
+            {/* Primary desktop notifications switch */}
             <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">
@@ -136,6 +149,30 @@ export function BrowserNotificationsCard({ className }: { className?: string }) 
                   onCheckedChange={(next) => void onToggle(next)}
                   disabled={requesting || permission === 'denied'}
                   aria-label={t('toggleLabel')}
+                />
+              </div>
+            </div>
+
+            {/* Notification sound switch (persisted next to notification preference) */}
+            <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
+              <div className="flex items-start gap-2.5 min-w-0">
+                {soundEnabled ? (
+                  <Volume2 className="size-4 text-primary mt-0.5 shrink-0" />
+                ) : (
+                  <VolumeX className="size-4 text-muted-foreground mt-0.5 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">
+                    {t('soundToggleLabel')}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{t('soundToggleDesc')}</p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Switch
+                  checked={soundEnabled}
+                  onCheckedChange={(next) => writeBrowserNotifySoundPref(next)}
+                  aria-label={t('soundToggleLabel')}
                 />
               </div>
             </div>

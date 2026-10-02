@@ -1757,6 +1757,8 @@
       "description": "Get a desktop alert for every new customer message, even while you're on another page. Saved to this device.",
       "toggleLabel": "Notify me about new customer messages",
       "toggleDesc": "Works only while the app is open in a browser tab.",
+      "soundToggleLabel": "Notification sound",
+      "soundToggleDesc": "Play a chime when a new message arrives.",
       "statusGranted": "Allowed by your browser.",
       "statusDefault": "Turning this on will ask your browser for permission.",
       "statusDenied": "Blocked in browser settings",
