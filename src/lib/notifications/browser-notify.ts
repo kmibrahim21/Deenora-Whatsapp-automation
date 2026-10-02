@@ -429,8 +429,8 @@ export function initAudioOnUserGesture(): () => void {
 }
 
 /**
- * Plays a short, pleasant two-tone chime (880 Hz -> 660 Hz sine, ~0.15s each).
- * Safe to call whether the tab is focused or in the background.
+ * Plays a loud, clear, pleasant two-tone chime (880 Hz -> 660 Hz, ~0.4s).
+ * Optimized for mobile phone speakers and desktop alerts with loud, clear gain (0.85).
  */
 export function playNotificationSound(): void {
   if (typeof window === "undefined") return;
@@ -448,22 +448,22 @@ export function playNotificationSound(): void {
 
     osc.type = "sine";
 
-    // Tone 1: 880 Hz (~0.15s), Tone 2: 660 Hz (~0.15s)
+    // Tone 1: 880 Hz (A5), Tone 2: 660 Hz (E5)
     osc.frequency.setValueAtTime(880, now);
-    osc.frequency.setValueAtTime(660, now + 0.14);
+    osc.frequency.setValueAtTime(660, now + 0.15);
 
-    // Smooth envelope with exponential attack & decay to prevent clicking
+    // Punchy, loud envelope (peak gain 0.85 for high audibility on mobile speakers)
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
-    gain.gain.setValueAtTime(0.18, now + 0.12);
-    gain.gain.exponentialRampToValueAtTime(0.15, now + 0.16);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.30);
+    gain.gain.exponentialRampToValueAtTime(0.85, now + 0.015);
+    gain.gain.setValueAtTime(0.75, now + 0.14);
+    gain.gain.exponentialRampToValueAtTime(0.85, now + 0.16);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
 
     osc.start(now);
-    osc.stop(now + 0.31);
+    osc.stop(now + 0.43);
   } catch (err) {
     // Non-fatal if audio hardware is unavailable or disabled
     console.debug("[browser-notify] chime playback error:", err);
