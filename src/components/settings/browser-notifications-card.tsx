@@ -95,11 +95,14 @@ export function BrowserNotificationsCard({ className }: { className?: string }) 
     if (soundEnabled) {
       playNotificationSound();
     }
+    toast.info(t('testTitle'), {
+      description: t('testBody'),
+    });
     try {
       await displayNotification(t('testTitle'), {
         body: t('testBody'),
-        icon: '/icon',
-        badge: '/icon',
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
         tag: 'wacrm-test-notification',
         url: '/inbox',
       });

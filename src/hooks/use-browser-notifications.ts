@@ -3,6 +3,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { Message } from "@/types";
 import {
@@ -99,25 +100,26 @@ export function useBrowserNotifications(): void {
     };
   });
 
+  const soundEnabled = useBrowserNotifySoundPref();
+
   // Message ids already handled, for replay dedupe. Survives re-renders,
   // pruned by shouldNotifyForMessage.
   const seenRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
-    if (!enabled) return;
-    if (getNotificationPermission() === "unsupported") return;
+    // Keep listener active if browser notify or notification sound is opted-in
+    if (!enabled && !soundEnabled) return;
 
     const supabase = createClient();
     let cancelled = false;
 
     const notify = async (msg: Message) => {
-      // If sound is enabled on this device, play the pleasant chime
-      if (readBrowserNotifySoundPref()) {
+      // 1. If sound is enabled on this device, play the pleasant chime
+      if (soundEnabled) {
         playNotificationSound();
       }
 
-      // One small select to put the contact's name in the title. A
-      // failure here just means the generic fallback title.
+      // 2. Fetch contact displayName
       const { data } = await supabase
         .from("conversations")
         .select("contact:contacts(name, wa_username, phone)")
@@ -135,20 +137,36 @@ export function useBrowserNotifications(): void {
       );
 
       const targetHref = conversationHref(msg.conversation_id);
-      await displayNotification(
-        title,
-        {
-          body,
-          tag: msg.conversation_id,
-          icon: "/icon",
-          badge: "/icon",
-          url: targetHref,
+
+      // 3. Always show in-app toast notification so user in active tab immediately sees message
+      toast(title, {
+        description: body,
+        action: {
+          label: "View",
+          onClick: () => {
+            window.focus();
+            router.push(targetHref);
+          },
         },
-        () => {
-          window.focus();
-          router.push(targetHref);
-        }
-      );
+      });
+
+      // 4. If system notifications are enabled and permission is granted, dispatch desktop/mobile notification
+      if (enabled && getNotificationPermission() === "granted") {
+        await displayNotification(
+          title,
+          {
+            body,
+            tag: msg.conversation_id,
+            icon: "/icons/icon-192.png",
+            badge: "/icons/icon-192.png",
+            url: targetHref,
+          },
+          () => {
+            window.focus();
+            router.push(targetHref);
+          }
+        );
+      }
     };
 
     const channel = supabase
@@ -157,9 +175,6 @@ export function useBrowserNotifications(): void {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
-          // Re-check every time: the user can revoke permission in the
-          // browser without the preference flipping.
-          if (getNotificationPermission() !== "granted") return;
           const msg = payload.new as Message;
           const shouldNotify = shouldNotifyForMessage(msg, {
             documentVisible: document.visibilityState === "visible",
@@ -179,5 +194,5 @@ export function useBrowserNotifications(): void {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [enabled, router]);
+  }, [enabled, soundEnabled, router]);
 }
