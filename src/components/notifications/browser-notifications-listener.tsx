@@ -56,7 +56,7 @@ export function BrowserNotificationsListener() {
   }
 
   return (
-    <div className="fixed bottom-[calc(76px+env(safe-area-inset-bottom,0px))] md:bottom-6 right-4 z-50 flex max-w-sm items-center justify-between gap-3 rounded-xl border border-primary/30 bg-card p-3 shadow-xl sm:right-6">
+    <div className="fixed bottom-4 right-4 z-50 flex max-w-sm items-center justify-between gap-3 rounded-xl border border-primary/30 bg-card p-3 shadow-xl sm:bottom-6 sm:right-6">
       <div className="flex items-center gap-2.5 min-w-0">
         <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <Bell className="size-4 animate-bounce" />

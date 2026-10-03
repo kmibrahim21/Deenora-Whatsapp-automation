@@ -39,8 +39,7 @@
     "defaultAvatar": "아바타",
     "menuProfile": "프로필",
     "menuSettings": "설정",
-    "menuSignOut": "로그아웃",
-    "more": "더보기"
+    "menuSignOut": "로그아웃"
   },
   "Header": {
     "dashboard": "대시보드",
