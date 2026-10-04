@@ -446,11 +446,17 @@ describe("browser-only helpers without a window", () => {
   });
 
   it("falls back to Notification constructor when ServiceWorker is unavailable", async () => {
-    const notificationInstances: any[] = [];
+    interface MockNotificationInstance {
+      title: string;
+      options?: NotificationOptions;
+      onclick?: (() => void) | null;
+      close: () => void;
+    }
+    const notificationInstances: MockNotificationInstance[] = [];
     class MockNotification {
       static permission = "granted";
-      public onclick: any = null;
-      constructor(public title: string, public options: any) {
+      public onclick: (() => void) | null = null;
+      constructor(public title: string, public options?: NotificationOptions) {
         notificationInstances.push(this);
       }
       close = vi.fn();
