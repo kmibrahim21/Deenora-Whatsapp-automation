@@ -39,8 +39,7 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configurações",
-    "menuSignOut": "Sair",
-    "more": "Mais"
+    "menuSignOut": "Sair"
   },
   "Header": {
     "dashboard": "Painel",

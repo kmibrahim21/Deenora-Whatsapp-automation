@@ -991,22 +991,7 @@ export async function dispatchInboundToFlows(
 
       // If the message matches a flow entry trigger and is NOT a button tap for the active run,
       // supercede the old run and start the new flow immediately.
-      //
-      // TAP-HIJACK GUARD: when the inbound is an interactive tap (button/list)
-      // and the active run is suspended at a prompt node (send_buttons /
-      // send_list / collect_input — see isSuspending in this file), the tap
-      // belongs to that pending prompt, or is stale. A keyword flow must
-      // NEVER steal the session mid-prompt: otherwise a tap like "Demo" fired
-      // while the customer is answering a list question kills the waiting
-      // run, and the customer's next tap gets misrouted and silently dropped.
-      // Fall through to handleReplyForActiveRun so the waiting run keeps
-      // ownership. The Demo/Features keyword fallbacks are unaffected — they
-      // still fire via the no-active-run path below when no run is waiting.
-      const activeRunAwaitingReply =
-        input.message.kind === "interactive_reply" &&
-        !!currentNode &&
-        isSuspending(currentNode.node_type);
-      if (matchingEntryFlow && !matchesCurrentNode && !activeRunAwaitingReply) {
+      if (matchingEntryFlow && !matchesCurrentNode) {
         await endRun(db, activeRun.id, "completed", "superceded_by_new_trigger");
         const newFlowNodes = await loadAllNodes(db, matchingEntryFlow.id);
         return startNewRun(db, matchingEntryFlow, input, newFlowNodes);

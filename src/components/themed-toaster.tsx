@@ -39,7 +39,6 @@ export function ThemedToaster() {
     <Toaster
       theme={isClient ? mode : DEFAULT_MODE}
       position="top-right"
-      className="toaster group mb-[calc(68px+env(safe-area-inset-bottom,0px))] md:mb-0"
       toastOptions={{
         style: {
           background: "var(--popover)",
